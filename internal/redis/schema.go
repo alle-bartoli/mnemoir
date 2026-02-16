@@ -75,7 +75,7 @@ func parseDimensionFromInfo(info any) (int, error) {
 	// Look for DIM in the info output
 	parts := strings.Split(infoStr, " ")
 	for i, part := range parts {
-		if part == "DIM" && i+1 < len(parts) {
+		if strings.EqualFold(part, "DIM") && i+1 < len(parts) {
 			dim, err := strconv.Atoi(parts[i+1])
 			if err != nil {
 				continue
@@ -88,17 +88,35 @@ func parseDimensionFromInfo(info any) (int, error) {
 	return parseDimensionNested(info)
 }
 
-// parseDimensionNested handles the nested slice structure from go-redis FT.INFO.
+// parseDimensionNested handles the nested structure from go-redis FT.INFO.
+// go-redis may return map[interface{}]interface{} or []any depending on version.
 func parseDimensionNested(v any) (int, error) {
 	switch val := v.(type) {
+	case map[any]any:
+		for k, mv := range val {
+			if str, ok := k.(string); ok && strings.EqualFold(str, "dim") {
+				return toInt(mv)
+			}
+			if dim, err := parseDimensionNested(mv); err == nil {
+				return dim, nil
+			}
+		}
+	case map[string]any:
+		for k, mv := range val {
+			if strings.EqualFold(k, "dim") {
+				return toInt(mv)
+			}
+			if dim, err := parseDimensionNested(mv); err == nil {
+				return dim, nil
+			}
+		}
 	case []any:
 		for i, item := range val {
-			if str, ok := item.(string); ok && str == "DIM" {
+			if str, ok := item.(string); ok && strings.EqualFold(str, "DIM") {
 				if i+1 < len(val) {
 					return toInt(val[i+1])
 				}
 			}
-			// Recurse into nested slices
 			if dim, err := parseDimensionNested(item); err == nil {
 				return dim, nil
 			}

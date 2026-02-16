@@ -39,7 +39,9 @@ func NewLocalEmbedder(cfg config.EmbeddingLocalConfig, dimension int) (*LocalEmb
 		model = "sentence-transformers/all-MiniLM-L6-v2"
 	}
 
-	modelPath, err := hugot.DownloadModel(model, modelDir, hugot.NewDownloadOptions())
+	dlOpts := hugot.NewDownloadOptions()
+	dlOpts.OnnxFilePath = "onnx/model.onnx"
+	modelPath, err := hugot.DownloadModel(model, modelDir, dlOpts)
 	if err != nil {
 		_ = session.Destroy()
 		return nil, fmt.Errorf("download model %s: %w", model, err)

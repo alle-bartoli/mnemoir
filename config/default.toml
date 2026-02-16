@@ -4,7 +4,7 @@ password = ""
 db = 0
 
 [compressor]
-provider = "claude" # "claude" | "ollama" | "local"
+provider = "local" # "claude" | "ollama" | "local"
 
 [compressor.claude]
 model = "claude-haiku-4-5-20251001"
@@ -17,8 +17,8 @@ model = "llama3.2"
 # Local compressor uses rule-based text analysis (no API keys needed)
 
 [embedding]
-provider = "openai" # "openai" | "ollama" | "local"
-dimension = 1536
+provider = "local" # "openai" | "ollama" | "local"
+dimension = 384 # 1536 for openai, 768 for ollama, 384 for local
 
 [embedding.openai]
 model = "text-embedding-3-small"
