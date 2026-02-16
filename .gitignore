@@ -7,7 +7,6 @@ bin/
 
 # Documentation (staged when ready)
 docs/
-README.md
 
 # Go test/build cache
 *.test
