@@ -269,6 +269,18 @@ func (s *Store) GetTopMemories(ctx context.Context, project string, limit int) (
 
 // PRIVATE
 
+// @dev float32ToBytes converts a float32 vector into a little-endian byte blob
+// for Redis VECTOR fields. Each float32 (4 bytes, IEEE 754) is written sequentially,
+// producing a buffer of len(v)*4 bytes that RediSearch uses directly for KNN search.
+//
+// The slice expression buf[i*4:] offsets into the buffer so each float32 lands
+// in its own 4-byte slot:
+//
+// v = [0.5, 1.0, 0.75] -> buf = make([]byte, 3*4) = 12 bytes
+//
+// i=0: buf[0:]  -> writes bytes at positions 0,1,2,3
+// i=1: buf[4:]  -> writes bytes at positions 4,5,6,7
+// i=2: buf[8:]  -> writes bytes at positions 8,9,10,11
 func float32ToBytes(v []float32) []byte {
 	buf := make([]byte, len(v)*4)
 	for i, f := range v {
