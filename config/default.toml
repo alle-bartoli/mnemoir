@@ -1,0 +1,44 @@
+[redis]
+addr = "localhost:6379"
+password = ""
+db = 0
+
+[compressor]
+provider = "claude" # "claude" | "ollama" | "local"
+
+[compressor.claude]
+model = "claude-haiku-4-5-20251001"
+# API key from ANTHROPIC_API_KEY env var
+
+[compressor.ollama]
+url = "http://localhost:11434"
+model = "llama3.2"
+
+# Local compressor uses rule-based text analysis (no API keys needed)
+
+[embedding]
+provider = "openai" # "openai" | "ollama" | "local"
+dimension = 1536
+
+[embedding.openai]
+model = "text-embedding-3-small"
+# API key from OPENAI_API_KEY env var
+
+[embedding.ollama]
+url = "http://localhost:11434"
+model = "nomic-embed-text"
+
+[embedding.local]
+model = "sentence-transformers/all-MiniLM-L6-v2"
+model_dir = "~/.agentmem/models"
+# dimension auto-set to 384 when provider = "local"
+
+[memory]
+default_importance = 5
+auto_decay = true
+decay_interval = "168h"
+decay_factor = 0.9
+
+[session]
+auto_summarize = true
+max_recall_items = 20

@@ -1,0 +1,13 @@
+services:
+  redis:
+    image: redis/redis-stack:latest
+    ports:
+      - "6379:6379"
+      - "8001:8001"
+    volumes:
+      - agentmem-data:/data
+    environment:
+      - REDIS_ARGS=--save 60 1 --appendonly yes
+
+volumes:
+  agentmem-data:

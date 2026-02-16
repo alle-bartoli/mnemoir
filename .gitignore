@@ -1,0 +1,33 @@
+# Build artifacts
+bin/
+*.exe
+*.dll
+*.so
+*.dylib
+
+# Documentation (staged when ready)
+docs/
+README.md
+
+# Go test/build cache
+*.test
+*.out
+cover.out
+coverage.html
+
+# IDE / editor
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Environment / secrets
+.env
+.env.*
+*.pem
+*.key
+
+# OS
+Thumbs.db
