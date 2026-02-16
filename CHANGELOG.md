@@ -24,5 +24,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - TOML configuration with environment variable expansion
 - Redis Stack backend with RediSearch for vector and full-text indexing
 - ULID-based IDs for chronological ordering
-- Docker Compose setup for Redis Stack
+- Docker Compose setup for Redis Stack with integrated RedisInsight UI (port 8001)
 - Zero API keys mode with `local` providers for both embedding and compression
+- `make help` target to show all available Makefile commands
+- `make redis-ui` target to open RedisInsight web UI in browser
+- RedisInsight usage documentation in README and setup guide

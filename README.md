@@ -4,7 +4,7 @@ Persistent memory system for AI coding agents, implemented in Go with Redis.
 
 ## Summary
 
-`agentmem` is an MCP (Model Context Protocol) server that gives AI coding agents long-term memory. 
+`agentmem` is an MCP (Model Context Protocol) server that gives AI coding agents long-term memory.
 It runs as a child process launched via stdio transport, storing and retrieving structured memories backed by Redis Stack.
 
 Unlike a simple key-value store, the system mimics human memory patterns:
@@ -42,8 +42,14 @@ The stack: Go binary communicates with your MCP client over stdio (JSON-RPC), st
 ## Quick Start
 
 ```bash
+# Show all available commands
+make help
+
 # Start Redis Stack and build binary
 make setup
+
+# Open RedisInsight web UI (optional)
+make redis-ui
 
 # Register MCP server with your client
 make mcp-register
@@ -130,6 +136,9 @@ See [docs/architecture.md](docs/architecture.md) for detailed data flows.
 ## Development
 
 ```bash
+# Show all available commands
+make help
+
 # Build binary
 make build
 
@@ -138,6 +147,9 @@ make test
 
 # Start Redis Stack
 make docker-up
+
+# Open RedisInsight web UI (http://localhost:8001)
+make redis-ui
 
 # Stop Redis Stack
 make docker-down
@@ -148,6 +160,31 @@ make clean
 # Install to $GOPATH/bin
 make install
 ```
+
+### RedisInsight Web UI
+
+Redis Stack includes **RedisInsight** on port `8001`. Open it with:
+
+```bash
+make redis-ui
+```
+
+Use it to:
+
+- Browse memories (`mem:{ulid}` hashes)
+- Inspect search index (`idx:memories`)
+- Monitor queries in real-time (Profiler)
+- Run Redis commands (Workbench)
+
+### Debugging with LazyVim/nvim-dap
+
+For Go debugging with Delve:
+
+1. Install Delve: `go install github.com/go-delve/delve/cmd/dlv@latest`
+2. Ensure Redis is running: `make docker-up`
+3. Open a Go file: `nvim cmd/agentmem/main.go`
+4. Set breakpoint: `<leader>db`
+5. Start debugger: `<leader>dc` → select "Debug Package"
 
 ## License
 
