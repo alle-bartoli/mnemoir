@@ -3,6 +3,7 @@ module github.com/alle-bartoli/agentmem
 go 1.25.4
 
 require (
+	github.com/knights-analytics/hugot v0.6.2
 	github.com/mark3labs/mcp-go v0.44.0
 	github.com/oklog/ulid/v2 v2.1.1
 	github.com/pelletier/go-toml/v2 v2.2.4
@@ -27,7 +28,6 @@ require (
 	github.com/gomlx/onnx-gomlx v0.3.4 // indirect
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/invopop/jsonschema v0.13.0 // indirect
-	github.com/knights-analytics/hugot v0.6.2 // indirect
 	github.com/knights-analytics/ortgenai v0.0.3 // indirect
 	github.com/mailru/easyjson v0.7.7 // indirect
 	github.com/mitchellh/colorstring v0.0.0-20190213212951-d06e56a500db // indirect

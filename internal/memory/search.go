@@ -10,6 +10,19 @@ import (
 )
 
 // VectorSearch performs KNN similarity search using embeddings.
+// The query string is embedded into a vector, then RediSearch finds the K nearest
+// neighbors via HNSW index using cosine distance.
+//
+// RediSearch returns cosine distance (0 = identical, 2 = opposite).
+// Scores are later converted to similarity via: similarity = 1.0 - distance.
+//
+// The generated FT.SEARCH query:
+//
+//	FT.SEARCH idx:memories "(@project:{p})=>[KNN 10 @embedding $vec AS score]"
+//	  PARAMS 2 vec <binary_blob>    -- query vector as little-endian float32 bytes
+//	  SORTBY score                  -- lowest distance first (most similar)
+//	  LIMIT 0 10
+//	  DIALECT 2                     -- required for vector query syntax
 func (s *Store) VectorSearch(ctx context.Context, query string, filters SearchFilters, limit int) ([]SearchResult, error) {
 	emb, err := s.embedder.Embed(ctx, query)
 	if err != nil {
@@ -46,7 +59,11 @@ func (s *Store) VectorSearch(ctx context.Context, query string, filters SearchFi
 	return results, nil
 }
 
-// FullTextSearch performs text-based search using RediSearch FTS.
+// FullTextSearch performs text-based search using RediSearch FTS (Full-Text Search).
+// RediSearch tokenizes the query and matches against the TEXT-indexed "content" field
+// using TF-IDF scoring (Term Frequency - Inverse Document Frequency).
+// WITHSCORES includes the relevance score in the response (higher = more relevant).
+// Unlike VectorSearch, this finds exact/stemmed keyword matches, not semantic similarity.
 func (s *Store) FullTextSearch(ctx context.Context, query string, filters SearchFilters, limit int) ([]SearchResult, error) {
 	ftsQuery := buildFTSQuery(query, filters)
 
@@ -72,6 +89,14 @@ func (s *Store) FullTextSearch(ctx context.Context, query string, filters Search
 }
 
 // HybridSearch combines vector and fulltext search with weighted scoring.
+// Runs both searches with 2x the limit for better merge quality, then mergeResults
+// normalizes and combines scores (0.7 vector + 0.3 FTS).
+// If one search fails, falls back to the other. Only fails if both fail.
+//
+// Why 0.7/0.3: vector search captures semantic meaning (e.g. "database config" finds
+// "Redis runs on port 6379"), while FTS catches exact keyword matches (e.g. searching
+// for a specific filename or port number). Semantic is more useful in general, but
+// FTS saves you when looking for a specific term. Weights are tunable via config.
 func (s *Store) HybridSearch(ctx context.Context, query string, filters SearchFilters, limit int) ([]SearchResult, error) {
 	// Run both searches with a larger limit for better merge quality
 	fetchLimit := limit * 2
@@ -96,6 +121,9 @@ func (s *Store) HybridSearch(ctx context.Context, query string, filters SearchFi
 
 // PRIVATE
 
+// @dev buildSearchFilter constructs a RediSearch filter expression for TAG fields.
+// TAG filters use the syntax @field:{value} for exact match.
+// Returns "*" (match all) if no filters are set.
 func buildSearchFilter(filters SearchFilters) string {
 	parts := []string{}
 	if filters.Project != "" {
@@ -117,6 +145,9 @@ func buildSearchFilter(filters SearchFilters) string {
 	return query
 }
 
+// @dev buildFTSQuery builds a full-text search query string.
+// User text is escaped to prevent RediSearch syntax injection (e.g. @, {, |).
+// TAG filters are appended after the escaped text.
 func buildFTSQuery(text string, filters SearchFilters) string {
 	// Escape special RediSearch query characters in user text
 	escaped := escapeQueryText(text)
@@ -131,6 +162,8 @@ func buildFTSQuery(text string, filters SearchFilters) string {
 	return query
 }
 
+// @dev escapeQueryText prefixes RediSearch special characters with backslash.
+// Without escaping, user input like "port:6379" would be parsed as field syntax.
 func escapeQueryText(s string) string {
 	special := []byte{'@', '!', '{', '}', '(', ')', '|', '-', '=', '>', '[', ']', ':', ';', '~', '*'}
 	result := make([]byte, 0, len(s)*2)
@@ -143,29 +176,28 @@ func escapeQueryText(s string) string {
 	return string(result)
 }
 
+// @dev extractSearchResults parses FT.SEARCH response (used by VectorSearch).
+// go-redis with RESP3 returns a map structure:
+//
+//	map[any]any{
+//	  "total_results": int64,
+//	  "results": []any{
+//	    map[any]any{"id": "mem:ULID", "extra_attributes": map[any]any{...}, "score": float64},
+//	  },
+//	}
+//
+// The "score" from KNN is cosine distance (0=identical, 2=opposite).
+// Converted to similarity: score = 1.0 - distance.
 func extractSearchResults(res any) ([]SearchResult, error) {
-	arr, ok := res.([]any)
-	if !ok || len(arr) < 1 {
+	entries := getResultEntries(res)
+	if len(entries) == 0 {
 		return nil, nil
 	}
 
 	var results []SearchResult
-	// Format: [total, key1, [field1, val1, ...], key2, ...]
-	for i := 1; i+1 < len(arr); i += 2 {
-		key, ok := arr[i].(string)
-		if !ok {
-			continue
-		}
-		fieldArr, ok := arr[i+1].([]any)
-		if !ok {
-			continue
-		}
-
-		vals := arrayToMap(fieldArr)
-		id := key
-		if len(key) > 4 {
-			id = key[4:]
-		}
+	for _, entry := range entries {
+		id := stripMemPrefix(getMapString(entry, "id"))
+		vals := getExtraAttributes(entry)
 
 		mem, err := hashToMemory(id, vals)
 		if err != nil {
@@ -173,10 +205,11 @@ func extractSearchResults(res any) ([]SearchResult, error) {
 		}
 
 		// Score from KNN is cosine distance (0=identical, 2=opposite)
-		// Convert to similarity: 1 - distance
 		score := 0.0
-		if s, err := strconv.ParseFloat(vals["score"], 64); err == nil {
-			score = 1.0 - s
+		if s, ok := vals["score"]; ok {
+			if d, err := strconv.ParseFloat(s, 64); err == nil {
+				score = 1.0 - d
+			}
 		}
 
 		results = append(results, SearchResult{Memory: *mem, Score: score})
@@ -185,36 +218,20 @@ func extractSearchResults(res any) ([]SearchResult, error) {
 	return results, nil
 }
 
+// @dev extractFTSResults parses the FT.SEARCH WITHSCORES response into SearchResults.
+// Same map structure as extractSearchResults, but the "score" field contains TF-IDF
+// relevance (higher = more relevant) instead of cosine distance.
 func extractFTSResults(res any) ([]SearchResult, error) {
-	arr, ok := res.([]any)
-	if !ok || len(arr) < 1 {
+	entries := getResultEntries(res)
+	if len(entries) == 0 {
 		return nil, nil
 	}
 
 	var results []SearchResult
-	// With WITHSCORES: [total, key1, score1, [fields...], key2, score2, [fields...], ...]
-	for i := 1; i+2 < len(arr); i += 3 {
-		key, ok := arr[i].(string)
-		if !ok {
-			continue
-		}
-
-		scoreStr, ok := arr[i+1].(string)
-		if !ok {
-			continue
-		}
-		score, _ := strconv.ParseFloat(scoreStr, 64)
-
-		fieldArr, ok := arr[i+2].([]any)
-		if !ok {
-			continue
-		}
-
-		vals := arrayToMap(fieldArr)
-		id := key
-		if len(key) > 4 {
-			id = key[4:]
-		}
+	for _, entry := range entries {
+		id := stripMemPrefix(getMapString(entry, "id"))
+		vals := getExtraAttributes(entry)
+		score := getMapFloat(entry, "score")
 
 		mem, err := hashToMemory(id, vals)
 		if err != nil {
@@ -227,6 +244,22 @@ func extractFTSResults(res any) ([]SearchResult, error) {
 	return results, nil
 }
 
+// @dev mergeResults combines vector and full-text search results into a single ranked list.
+// Both result sets use different score scales (cosine similarity vs TF-IDF), so each set
+// is normalized to [0, 1] by dividing by its max score. Then weighted scores are combined:
+//
+//	final_score = (vec_normalized * vectorWeight) + (fts_normalized * ftsWeight)
+//
+// If a memory appears in both sets, scores are summed (it gets boosted).
+// If it appears in only one set, it gets only that weighted score.
+// Default weights are 0.7 vector + 0.3 FTS: semantic meaning dominates,
+// but exact keyword matches still contribute.
+//
+// Example: memory "X" has vec_score=0.9 (max=1.0) and fts_score=5.0 (max=10.0)
+//
+//	vec_normalized = 0.9/1.0 = 0.9  -> weighted = 0.9 * 0.7 = 0.63
+//	fts_normalized = 5.0/10.0 = 0.5 -> weighted = 0.5 * 0.3 = 0.15
+//	final_score = 0.63 + 0.15 = 0.78
 func mergeResults(vectorResults, ftsResults []SearchResult, vectorWeight, ftsWeight float64) []SearchResult {
 	merged := make(map[string]SearchResult)
 
@@ -273,6 +306,7 @@ func mergeResults(vectorResults, ftsResults []SearchResult, vectorWeight, ftsWei
 	return results
 }
 
+// @dev maxScore returns the highest score in a result set, used for normalization.
 func maxScore(results []SearchResult) float64 {
 	m := 0.0
 	for _, r := range results {
@@ -281,6 +315,7 @@ func maxScore(results []SearchResult) float64 {
 	return m
 }
 
+// @dev truncate caps the result slice to the requested limit.
 func truncate(results []SearchResult, limit int) []SearchResult {
 	if len(results) <= limit {
 		return results

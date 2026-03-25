@@ -380,58 +380,41 @@ func buildFilterQuery(project string, olderThan time.Duration) string {
 	return query
 }
 
+// @dev extractIDsFromSearch extracts memory keys from a NOCONTENT FT.SEARCH response.
 func extractIDsFromSearch(res any) []string {
-	arr, ok := res.([]any)
-	if !ok || len(arr) < 1 {
-		return nil
-	}
-
+	entries := getResultEntries(res)
 	var ids []string
-	// arr[0] is the total count, then alternating key, fields
-	for i := 1; i < len(arr); i++ {
-		if key, ok := arr[i].(string); ok {
-			ids = append(ids, key)
+	for _, entry := range entries {
+		if id := getMapString(entry, "id"); id != "" {
+			ids = append(ids, id)
 		}
 	}
 	return ids
 }
 
+// @dev extractTotalFromSearch returns total_results from FT.SEARCH response.
 func extractTotalFromSearch(res any) int {
-	arr, ok := res.([]any)
-	if !ok || len(arr) < 1 {
+	m, ok := res.(map[any]any)
+	if !ok {
 		return 0
 	}
-	if total, ok := arr[0].(int64); ok {
+	if total, ok := m["total_results"].(int64); ok {
 		return int(total)
 	}
 	return 0
 }
 
+// @dev extractMemoriesFromSearch parses FT.SEARCH results into Memory structs.
 func extractMemoriesFromSearch(res any) ([]Memory, error) {
-	arr, ok := res.([]any)
-	if !ok || len(arr) < 1 {
+	entries := getResultEntries(res)
+	if len(entries) == 0 {
 		return nil, nil
 	}
 
 	var memories []Memory
-	// Format: [total, key1, [field1, val1, ...], key2, [field2, val2, ...], ...]
-	for i := 1; i+1 < len(arr); i += 2 {
-		key, ok := arr[i].(string)
-		if !ok {
-			continue
-		}
-
-		fieldArr, ok := arr[i+1].([]any)
-		if !ok {
-			continue
-		}
-
-		vals := arrayToMap(fieldArr)
-		// Extract ID from key "mem:ULID"
-		id := key
-		if len(key) > 4 {
-			id = key[4:]
-		}
+	for _, entry := range entries {
+		id := stripMemPrefix(getMapString(entry, "id"))
+		vals := getExtraAttributes(entry)
 
 		mem, err := hashToMemory(id, vals)
 		if err != nil {
@@ -443,14 +426,15 @@ func extractMemoriesFromSearch(res any) ([]Memory, error) {
 	return memories, nil
 }
 
+// @dev computeStats aggregates statistics from FT.SEARCH results.
 func computeStats(res any) (*MemoryStats, error) {
-	arr, ok := res.([]any)
-	if !ok || len(arr) < 1 {
+	m, ok := res.(map[any]any)
+	if !ok {
 		return &MemoryStats{ByType: map[string]int{}}, nil
 	}
 
 	total := 0
-	if t, ok := arr[0].(int64); ok {
+	if t, ok := m["total_results"].(int64); ok {
 		total = int(t)
 	}
 
@@ -459,15 +443,12 @@ func computeStats(res any) (*MemoryStats, error) {
 		ByType: map[string]int{"fact": 0, "concept": 0, "narrative": 0},
 	}
 
+	entries := getResultEntries(res)
 	var sumImportance int
 	var oldest, newest int64
 
-	for i := 1; i+1 < len(arr); i += 2 {
-		fieldArr, ok := arr[i+1].([]any)
-		if !ok {
-			continue
-		}
-		vals := arrayToMap(fieldArr)
+	for _, entry := range entries {
+		vals := getExtraAttributes(entry)
 
 		if t := vals["type"]; t != "" {
 			stats.ByType[t]++
@@ -494,14 +475,73 @@ func computeStats(res any) (*MemoryStats, error) {
 	return stats, nil
 }
 
-func arrayToMap(arr []any) map[string]string {
-	m := make(map[string]string)
-	for i := 0; i+1 < len(arr); i += 2 {
-		key, ok1 := arr[i].(string)
-		val, ok2 := arr[i+1].(string)
-		if ok1 && ok2 {
-			m[key] = val
+// @dev getResultEntries extracts the "results" array from a RESP3 FT.SEARCH response.
+// Each entry is a map[any]any with "id", "score", and "extra_attributes" keys.
+func getResultEntries(res any) []map[any]any {
+	m, ok := res.(map[any]any)
+	if !ok {
+		return nil
+	}
+	results, ok := m["results"].([]any)
+	if !ok {
+		return nil
+	}
+	var entries []map[any]any
+	for _, item := range results {
+		if entry, ok := item.(map[any]any); ok {
+			entries = append(entries, entry)
 		}
 	}
+	return entries
+}
+
+// @dev getExtraAttributes extracts field values from a result entry as map[string]string.
+// In RESP3, fields are in "extra_attributes" as map[any]any (not a flat array).
+func getExtraAttributes(entry map[any]any) map[string]string {
+	m := make(map[string]string)
+	attrs, ok := entry["extra_attributes"].(map[any]any)
+	if !ok {
+		return m
+	}
+	for k, v := range attrs {
+		key, ok := k.(string)
+		if !ok {
+			continue
+		}
+		m[key] = fmt.Sprintf("%v", v)
+	}
 	return m
+}
+
+// @dev getMapString extracts a string value from a map[any]any.
+func getMapString(m map[any]any, key string) string {
+	if v, ok := m[key]; ok {
+		if s, ok := v.(string); ok {
+			return s
+		}
+	}
+	return ""
+}
+
+// @dev getMapFloat extracts a float64 value from a map[any]any.
+func getMapFloat(m map[any]any, key string) float64 {
+	if v, ok := m[key]; ok {
+		switch f := v.(type) {
+		case float64:
+			return f
+		case string:
+			if n, err := strconv.ParseFloat(f, 64); err == nil {
+				return n
+			}
+		}
+	}
+	return 0
+}
+
+// @dev stripMemPrefix removes the "mem:" key prefix to get the plain ULID.
+func stripMemPrefix(key string) string {
+	if len(key) > 4 && key[:4] == "mem:" {
+		return key[4:]
+	}
+	return key
 }

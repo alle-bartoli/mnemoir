@@ -8,13 +8,19 @@ import (
 	"github.com/alle-bartoli/agentmem/internal/config"
 )
 
-// IEmbedder generates vector embeddings from text.
+// @dev IEmbedder generates vector embeddings from text.
+// Uses []float32 (not []float64) because:
+//   - Redis VECTOR fields store FLOAT32
+//   - Embedding models natively return float32
+//   - Halves memory usage compared to float64 (4 bytes vs 8 per dimension)
+//   - The extra precision of float64 is irrelevant for similarity search
 type IEmbedder interface {
 	Embed(ctx context.Context, text string) ([]float32, error)
 	Dimension() int
 }
 
-// NewEmbedder creates an embedder based on config provider.
+// @dev NewEmbedder creates an embedder based on config provider (factory pattern).
+// Supported providers: "openai" (1536d), "ollama" (768d), "local" (384d ONNX).
 func NewEmbedder(cfg config.EmbeddingConfig) (IEmbedder, error) {
 	switch cfg.Provider {
 	case "openai":

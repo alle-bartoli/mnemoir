@@ -3,7 +3,12 @@ package memory
 
 import "time"
 
-// MemoryType classifies the kind of memory stored.
+// @dev MemoryType classifies the kind of memory stored.
+// String alias (not iota/int) because:
+//   - Serializes directly to JSON/Redis without a conversion layer
+//   - Readable in logs and debug output
+//   - Tradeoff: no compile-time type safety, but values are validated at
+//     the boundary (MCP handler) via ValidMemoryType()
 type MemoryType string
 
 const (
