@@ -1,33 +1,34 @@
 # Agentmem
 
-Persistent memory system for AI coding agents, implemented in Go with Redis.
+Personal memory layer for AI coding agents. Runs offline, keeps data local.
+
+## Why I built this
+
+Claude Code's built-in memory (CLAUDE.md + auto-memory) is file-based and flat. No semantic search, no decay, no scoring. I wanted something that works more like actual memory: things you use often stay sharp, things you forget fade away.
+
+The key ideas behind agentmem:
+
+- **Offline by default.** The entire stack runs without API keys. Local ONNX embeddings and rule-based compression keep everything on my machine. Cloud providers (OpenAI, Claude API, Ollama) are supported but optional.
+- **Spaced repetition.** Importance scores decay over time (`importance * 0.9^weeks`). Each recall boosts the score back up. This means the agent's context naturally prioritizes what matters.
+- **Typed memories.** Not everything is a flat string. Facts (concrete data), concepts (patterns/decisions), and narratives (what happened and why) are stored and searched differently.
 
 ## Summary
 
-`agentmem` is an MCP (Model Context Protocol) server that gives AI coding agents long-term memory.
-It runs as a child process launched via stdio transport, storing and retrieving structured memories backed by Redis Stack.
+`agentmem` is an MCP server that gives AI coding agents long-term memory. It runs as a child process via stdio transport, backed by Redis Stack.
 
-Unlike a simple key-value store, the system mimics human memory patterns:
-
-- **Typed memories**: facts (concrete data), concepts (patterns/decisions), narratives (what happened and why)
-- **Semantic search**: hybrid vector + full-text search via RediSearch HNSW index
-- **Temporal decay**: importance scores degrade over time, boosted on recall (spaced repetition)
-- **Session continuity**: sessions carry previous summaries and top memories across restarts
-- **AI compression**: raw observations are automatically decomposed into structured memories via Claude API, Ollama, or local rule-based extraction
-
-The stack: Go binary communicates with your MCP client over stdio (JSON-RPC), stores data in Redis Stack (Hashes + RediSearch), generates embeddings via OpenAI, Ollama, or local ONNX, and extracts structured memories via Claude API, Ollama, or local rule-based analysis.
+The stack: Go binary over stdio (JSON-RPC), Redis Stack (Hashes + RediSearch), embeddings via OpenAI/Ollama/local ONNX, memory extraction via Claude API/Ollama/local rules.
 
 ## Features
 
-- **MCP-native**: Exposes 8 tools via Model Context Protocol over stdio transport
-- **Hybrid search**: Vector similarity + full-text search via RediSearch
-- **Memory types**: `fact`, `concept`, `narrative` with automatic classification
-- **Temporal decay**: Importance scores decay over time, boosted on recall (spaced repetition)
-- **Triple embedding support**: OpenAI (`text-embedding-3-small`), Ollama (`nomic-embed-text`), or local ONNX (`all-MiniLM-L6-v2`)
-- **Flexible compression**: Claude API, Ollama, or local rule-based extraction of structured memories
-- **Zero API keys mode**: run fully offline with `local` providers for both embedding and compression
-- **Session management**: Start/end sessions with automatic summarization
-- **Multi-project**: Scoped memories per project with cross-project recall
+- **Offline-first**: local ONNX embeddings + rule-based compression, no API keys required
+- **Spaced repetition**: importance decay over time, boost on recall
+- **Typed memories**: `fact`, `concept`, `narrative` with automatic classification
+- **Hybrid search**: vector (KNN/HNSW) + full-text (TF-IDF) via RediSearch
+- **MCP-native**: 8 tools via Model Context Protocol over stdio
+- **Triple embedding**: OpenAI (`text-embedding-3-small`, 1536d), Ollama (`nomic-embed-text`, 768d), local ONNX (`all-MiniLM-L6-v2`, 384d)
+- **Flexible compression**: Claude API, Ollama, or local rule-based extraction
+- **Session management**: start/end sessions with automatic summarization
+- **Multi-project**: scoped memories per project with cross-project recall
 
 ## Prerequisites
 
@@ -78,7 +79,6 @@ Key settings:
 - `memory.auto_decay`: Enable temporal decay (default: `true`)
 - `session.max_recall_items`: Limit recalled memories (default: `20`)
 
-See [docs/configuration.md](docs/configuration.md) for full reference.
 
 ## MCP Tools
 
@@ -93,7 +93,6 @@ See [docs/configuration.md](docs/configuration.md) for full reference.
 | `list_projects` | List all projects with memory counts                         |
 | `memory_stats`  | Get statistics (total memories, types, avg importance)       |
 
-See [docs/tools-reference.md](docs/tools-reference.md) for parameters and return values.
 
 ## Architecture
 
@@ -131,7 +130,6 @@ agentmem/
 └── docs/                # Architecture, tools reference, setup
 ```
 
-See [docs/architecture.md](docs/architecture.md) for detailed data flows.
 
 ## Development
 
