@@ -21,7 +21,7 @@ The stack: Go binary over stdio (JSON-RPC), Redis Stack (Hashes + RediSearch), e
 ## Features
 
 - **Offline-first**: local ONNX embeddings + rule-based compression, no API keys required
-- **Spaced repetition**: importance decay over time, boost on recall
+- **Spaced repetition**: lazy temporal decay + recall boost on importance, integrated into hybrid search scoring
 - **Typed memories**: `fact`, `concept`, `narrative` with automatic classification
 - **Hybrid search**: vector (KNN/HNSW) + full-text (TF-IDF) via RediSearch
 - **MCP-native**: 8 tools via Model Context Protocol over stdio
@@ -79,6 +79,13 @@ Key settings:
 - `compressor.provider`: `claude`, `ollama`, or `local`
 - `embedding.provider`: `openai`, `ollama`, or `local`
 - `memory.auto_decay`: Enable temporal decay (default: `true`)
+- `memory.decay_factor`: Multiplier per interval, e.g. `0.9` = 10% loss (default: `0.9`)
+- `memory.decay_interval`: Time between decay steps (default: `168h` = 1 week)
+- `memory.vector_weight`: Semantic search weight in hybrid scoring (default: `0.60`)
+- `memory.fts_weight`: Keyword search weight in hybrid scoring (default: `0.25`)
+- `memory.importance_weight`: Memory importance weight in hybrid scoring (default: `0.15`)
+- `memory.access_boost_factor`: Points gained per recall (default: `0.3`)
+- `memory.access_boost_cap`: Max boost from recalls (default: `2.0`)
 - `session.max_recall_items`: Limit recalled memories (default: `20`)
 
 ## MCP Tools
@@ -93,6 +100,74 @@ Key settings:
 | `end_session`   | Close session with automatic summarization                   |
 | `list_projects` | List all projects with memory counts                         |
 | `memory_stats`  | Get statistics (total memories, types, avg importance)       |
+
+## Spaced Repetition
+
+Memories decay over time and get boosted on recall, just like human memory.
+This is computed lazily at query time (no background goroutine, no overhead).
+
+### How it works
+
+Every memory has a base `importance` (1-10).
+When you `recall` memories, the search engine computes an **effective importance** that factors in:
+
+1. **Temporal decay**: importance drops by `decay_factor` (default 10%) per `decay_interval` (default 1 week)
+2. **Access boost**: each recall adds `access_boost_factor` points (default 0.3), capped at `access_boost_cap` (default 2.0)
+3. **Clamping**: result is always between 1 and 10
+
+```
+effective = base * decay_factor^intervals + min(boost_cap, access_count * boost_factor)
+```
+
+### Decay examples
+
+| Scenario             | Importance | Weeks idle | Recalls | Effective |
+| -------------------- | ---------- | ---------- | ------- | --------- |
+| Fresh memory         | 8          | 0          | 0       | 8.0       |
+| One week idle        | 8          | 1          | 0       | 7.2       |
+| Three weeks idle     | 8          | 3          | 0       | 5.8       |
+| Frequently recalled  | 8          | 3          | 5       | 7.3       |
+| Old but heavily used | 5          | 8          | 10      | 4.1       |
+| Minimum floor        | 3          | 20         | 0       | 1.0       |
+
+### How it affects search
+
+Hybrid search (`recall` with `search_mode: hybrid`) combines three signals:
+
+| Signal              | Default weight | What it captures                            |
+| ------------------- | -------------- | ------------------------------------------- |
+| Vector (semantic)   | 0.60           | Meaning similarity via embeddings           |
+| Full-text (keyword) | 0.25           | Exact/stemmed keyword matches               |
+| Importance (decay)  | 0.15           | How important and recently used a memory is |
+
+Each signal is normalized to [0, 1] before weighting.
+A memory with high effective importance gets a scoring nudge that can push it above a semantically similar but forgotten memory.
+
+### When recall boosts happen
+
+Every time a memory appears in search results (`recall`, `start_session` top memories), its `access_count` increments and `importance` is recalculated and persisted. This means:
+
+- Memories you keep finding stay relevant
+- Memories you never search for gradually fade
+- The agent's context window naturally fills with what matters most
+
+### Tuning
+
+All parameters are configurable in `~/.agentmem/config.toml` under `[memory]`:
+
+```toml
+[memory]
+auto_decay = true          # enable/disable the decay system
+decay_factor = 0.9         # 0.9 = 10% loss per interval
+decay_interval = "168h"    # 1 week between decay steps
+vector_weight = 0.60       # semantic search weight
+fts_weight = 0.25          # keyword search weight
+importance_weight = 0.15   # importance weight in scoring
+access_boost_factor = 0.3  # points per recall
+access_boost_cap = 2.0     # max recall boost
+```
+
+Set `importance_weight = 0` to disable importance scoring. Set `auto_decay = false` to keep static importance values.
 
 ## Architecture
 

@@ -32,7 +32,14 @@ func newTestStore(t *testing.T) *Store {
 		t.Fatalf("NewLocalEmbedder: %v", err)
 	}
 
-	store := NewStore(rdb, emb)
+	store := NewStore(rdb, emb, config.MemoryConfig{
+		DefaultImportance:  5,
+		AutoDecay:          true,
+		DecayInterval:      "168h",
+		DecayFactor:        0.9,
+		AccessBoostFactor:  0.3,
+		AccessBoostCap:     2.0,
+	})
 
 	t.Cleanup(func() {
 		// Clean up test keys

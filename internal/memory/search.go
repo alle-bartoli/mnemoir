@@ -7,6 +7,7 @@ import (
 	"slices"
 	"sort"
 	"strconv"
+	"time"
 )
 
 // VectorSearch performs KNN similarity search using embeddings.
@@ -115,7 +116,12 @@ func (s *Store) HybridSearch(ctx context.Context, query string, filters SearchFi
 		return truncate(vectorResults, limit), nil
 	}
 
-	merged := mergeResults(vectorResults, ftsResults, 0.7, 0.3)
+	decayInterval, _ := s.memCfg.ParsedDecayInterval()
+	merged := mergeResults(vectorResults, ftsResults,
+		s.memCfg.VectorWeight, s.memCfg.FTSWeight, s.memCfg.ImportanceWeight,
+		s.memCfg.DecayFactor, decayInterval,
+		s.memCfg.AccessBoostFactor, s.memCfg.AccessBoostCap,
+	)
 	return truncate(merged, limit), nil
 }
 
@@ -245,23 +251,19 @@ func extractFTSResults(res any) ([]SearchResult, error) {
 	return results, nil
 }
 
-// @dev mergeResults combines vector and full-text search results into a single ranked list.
-// Both result sets use different score scales (cosine similarity vs TF-IDF), so each set
-// is normalized to [0, 1] by dividing by its max score. Then weighted scores are combined:
+// @dev mergeResults combines vector, full-text, and importance signals into a single ranked list.
+// Both vec/FTS result sets use different score scales (cosine similarity vs TF-IDF), so each
+// is normalized to [0, 1] by dividing by its max score. Importance is normalized by /10.
+// Weighted scores are combined:
 //
-//	final_score = (vec_normalized * vectorWeight) + (fts_normalized * ftsWeight)
+//	final_score = (vec_norm * vectorWeight) + (fts_norm * ftsWeight) + (imp_norm * importanceWeight)
 //
-// If a memory appears in both sets, scores are summed (it gets boosted).
-// If it appears in only one set, it gets only that weighted score.
-// Default weights are 0.7 vector + 0.3 FTS: semantic meaning dominates,
-// but exact keyword matches still contribute.
-//
-// Example: memory "X" has vec_score=0.9 (max=1.0) and fts_score=5.0 (max=10.0)
-//
-//	vec_normalized = 0.9/1.0 = 0.9  -> weighted = 0.9 * 0.7 = 0.63
-//	fts_normalized = 5.0/10.0 = 0.5 -> weighted = 0.5 * 0.3 = 0.15
-//	final_score = 0.63 + 0.15 = 0.78
-func mergeResults(vectorResults, ftsResults []SearchResult, vectorWeight, ftsWeight float64) []SearchResult {
+// Default weights: 0.60 vector + 0.25 FTS + 0.15 importance.
+func mergeResults(vectorResults, ftsResults []SearchResult,
+	vectorWeight, ftsWeight, importanceWeight float64,
+	decayFactor float64, decayInterval time.Duration,
+	boostFactor, boostCap float64,
+) []SearchResult {
 	merged := make(map[string]SearchResult)
 
 	// Normalize vector scores
@@ -293,6 +295,14 @@ func mergeResults(vectorResults, ftsResults []SearchResult, vectorWeight, ftsWei
 				Score:  normalized * ftsWeight,
 			}
 		}
+	}
+
+	// Apply importance boost as a third scoring signal
+	for id, r := range merged {
+		effImp := r.Memory.EffectiveImportance(decayFactor, decayInterval, boostFactor, boostCap)
+		impNormalized := effImp / 10.0 // normalize to [0, 1]
+		r.Score += impNormalized * importanceWeight
+		merged[id] = r
 	}
 
 	results := make([]SearchResult, 0, len(merged))

@@ -68,6 +68,11 @@ type MemoryConfig struct {
 	AutoDecay         bool    `toml:"auto_decay"`
 	DecayInterval     string  `toml:"decay_interval"`
 	DecayFactor       float64 `toml:"decay_factor"`
+	VectorWeight      float64 `toml:"vector_weight"`
+	FTSWeight         float64 `toml:"fts_weight"`
+	ImportanceWeight  float64 `toml:"importance_weight"`
+	AccessBoostFactor float64 `toml:"access_boost_factor"`
+	AccessBoostCap    float64 `toml:"access_boost_cap"`
 }
 
 // ParsedDecayInterval returns the decay interval as time.Duration.
@@ -141,6 +146,11 @@ func Load(path string) (*Config, error) {
 			AutoDecay:         true,
 			DecayInterval:     "168h",
 			DecayFactor:       0.9,
+			VectorWeight:      0.60,
+			FTSWeight:         0.25,
+			ImportanceWeight:  0.15,
+			AccessBoostFactor: 0.3,
+			AccessBoostCap:    2.0,
 		},
 		Session: SessionConfig{
 			AutoSummarize:  true,

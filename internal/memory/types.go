@@ -1,7 +1,10 @@
 // Package memory implements persistent memory storage, CRUD, and search.
 package memory
 
-import "time"
+import (
+	"math"
+	"time"
+)
 
 // @dev MemoryType classifies the kind of memory stored.
 // String alias (not iota/int) because:
@@ -53,6 +56,24 @@ type Memory struct {
 // CreatedAtTime returns CreatedAt as time.Time.
 func (m *Memory) CreatedAtTime() time.Time {
 	return time.Unix(m.CreatedAt, 0)
+}
+
+// @dev EffectiveImportance returns importance adjusted by temporal decay and access boost.
+// Formula: base * decay^intervals + accessBoost
+//   - intervals = time since last access / decayInterval
+//   - accessBoost = min(boostCap, accessCount * boostFactor) -- caps at boostCap points
+//   - result clamped to [1, 10]
+//
+// The boost rewards frequently accessed memories. A memory recalled 5+ times gets +1.5
+// points (with default 0.3 factor) that counteracts the decay. A memory recalled 7+
+// times hits the +2.0 cap.
+func (m *Memory) EffectiveImportance(decayFactor float64, decayInterval time.Duration, boostFactor, boostCap float64) float64 {
+	now := time.Now().Unix()
+	elapsed := float64(now - m.LastAccessed)
+	intervals := elapsed / decayInterval.Seconds()
+	decayed := float64(m.Importance) * math.Pow(decayFactor, intervals)
+	boost := math.Min(boostCap, float64(m.AccessCount)*boostFactor)
+	return math.Max(1.0, math.Min(10.0, decayed+boost))
 }
 
 // Session tracks a working session with a project.

@@ -68,7 +68,7 @@ func main() {
 	}
 
 	// Initialize memory store
-	store := memory.NewStore(rc.RDB(), emb)
+	store := memory.NewStore(rc.RDB(), emb, cfg.Memory)
 
 	// Create and start MCP server
 	s := mcpserver.NewServer(store, comp, cfg)

@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/alle-bartoli/agentmem/internal/config"
 	"github.com/alle-bartoli/agentmem/internal/embedding"
 	goredis "github.com/redis/go-redis/v9"
 )
@@ -29,11 +30,12 @@ func ValidateTagValue(s string) error {
 type Store struct {
 	rdb      *goredis.Client
 	embedder embedding.IEmbedder
+	memCfg   config.MemoryConfig
 }
 
 // NewStore creates a new memory store.
-func NewStore(rdb *goredis.Client, embedder embedding.IEmbedder) *Store {
-	return &Store{rdb: rdb, embedder: embedder}
+func NewStore(rdb *goredis.Client, embedder embedding.IEmbedder, memCfg config.MemoryConfig) *Store {
+	return &Store{rdb: rdb, embedder: embedder, memCfg: memCfg}
 }
 
 // Save persists a memory to Redis with its embedding.
@@ -133,13 +135,37 @@ func (s *Store) DeleteByFilter(ctx context.Context, project string, olderThan ti
 	return totalDeleted, nil
 }
 
-// UpdateAccess increments access_count and updates last_accessed.
+// UpdateAccess increments access_count, updates last_accessed, and recalculates
+// importance using spaced repetition decay + access boost.
 func (s *Store) UpdateAccess(ctx context.Context, id string) error {
 	key := "mem:" + id
+
+	vals, err := s.rdb.HMGet(ctx, key, "importance", "access_count", "last_accessed").Result()
+	if err != nil {
+		return fmt.Errorf("read access state %s: %w", id, err)
+	}
+
+	importance, _ := strconv.Atoi(fmt.Sprint(vals[0]))
+	accessCount, _ := strconv.Atoi(fmt.Sprint(vals[1]))
+	lastAccessed, _ := strconv.ParseInt(fmt.Sprint(vals[2]), 10, 64)
+
+	// Build temporary memory to compute effective importance after this recall
+	mem := &Memory{
+		Importance:   importance,
+		AccessCount:  accessCount + 1,
+		LastAccessed: lastAccessed,
+	}
+	decayInterval, _ := s.memCfg.ParsedDecayInterval()
+	newImportance := int(mem.EffectiveImportance(
+		s.memCfg.DecayFactor, decayInterval,
+		s.memCfg.AccessBoostFactor, s.memCfg.AccessBoostCap,
+	))
+
 	pipe := s.rdb.Pipeline()
 	pipe.HIncrBy(ctx, key, "access_count", 1)
 	pipe.HSet(ctx, key, "last_accessed", time.Now().Unix())
-	_, err := pipe.Exec(ctx)
+	pipe.HSet(ctx, key, "importance", newImportance)
+	_, err = pipe.Exec(ctx)
 	if err != nil {
 		return fmt.Errorf("update access %s: %w", id, err)
 	}

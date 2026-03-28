@@ -55,7 +55,14 @@ func newSearchTestStore(t *testing.T) *Store {
 		t.Fatalf("NewLocalEmbedder: %v", err)
 	}
 
-	store := NewStore(rdb, emb)
+	store := NewStore(rdb, emb, config.MemoryConfig{
+		DefaultImportance:  5,
+		AutoDecay:          true,
+		DecayInterval:      "168h",
+		DecayFactor:        0.9,
+		AccessBoostFactor:  0.3,
+		AccessBoostCap:     2.0,
+	})
 
 	// Save all test memories
 	mems := testMemories()
@@ -240,6 +247,103 @@ func TestHybridSearch_CombinesResults(t *testing.T) {
 	}
 	if !foundNarrative {
 		t.Error("HybridSearch should find Redis debug narrative")
+	}
+}
+
+func TestUpdateAccess_PersistsNewImportance(t *testing.T) {
+	store := newSearchTestStore(t)
+	ctx := context.Background()
+
+	// Get initial importance of test memory
+	before, err := store.Get(ctx, "test-s-001")
+	if err != nil {
+		t.Fatalf("Get before: %v", err)
+	}
+	initialImportance := before.Importance
+
+	// Recall several times to boost importance
+	for i := 0; i < 5; i++ {
+		if err := store.UpdateAccess(ctx, "test-s-001"); err != nil {
+			t.Fatalf("UpdateAccess #%d: %v", i+1, err)
+		}
+	}
+
+	after, err := store.Get(ctx, "test-s-001")
+	if err != nil {
+		t.Fatalf("Get after: %v", err)
+	}
+
+	t.Logf("Importance: before=%d, after=%d, accessCount=%d", initialImportance, after.Importance, after.AccessCount)
+
+	if after.AccessCount != before.AccessCount+5 {
+		t.Errorf("AccessCount = %d, want %d", after.AccessCount, before.AccessCount+5)
+	}
+
+	// With 5 accesses and boost factor 0.3, boost = min(2.0, 1.5) = 1.5
+	// Fresh memory (no decay) importance should be >= initial due to boost
+	if after.Importance < initialImportance {
+		t.Errorf("Importance should not decrease for freshly recalled memory: got %d, initial was %d", after.Importance, initialImportance)
+	}
+}
+
+func TestHybridSearch_ImportanceAffectsRanking(t *testing.T) {
+	store := newSearchTestStore(t)
+	ctx := context.Background()
+
+	// Save two nearly identical memories with different importance
+	now := time.Now().Unix()
+	memHigh := &Memory{
+		ID: "test-s-rank-high", Content: "Configuration settings for the application server",
+		Type: Fact, Project: searchTestProject, Tags: "config", Importance: 9,
+		CreatedAt: now, LastAccessed: now, AccessCount: 5,
+	}
+	memLow := &Memory{
+		ID: "test-s-rank-low", Content: "Configuration settings for the application server",
+		Type: Fact, Project: searchTestProject, Tags: "config", Importance: 2,
+		CreatedAt: now, LastAccessed: now, AccessCount: 0,
+	}
+
+	if err := store.Save(ctx, memHigh); err != nil {
+		t.Fatalf("Save high: %v", err)
+	}
+	if err := store.Save(ctx, memLow); err != nil {
+		t.Fatalf("Save low: %v", err)
+	}
+	time.Sleep(500 * time.Millisecond)
+
+	t.Cleanup(func() {
+		rdb := store.rdb
+		rdb.Del(ctx, "mem:test-s-rank-high", "mem:test-s-rank-low")
+	})
+
+	filters := SearchFilters{Project: searchTestProject}
+	results, err := store.HybridSearch(ctx, "application server configuration", filters, 10)
+	if err != nil {
+		t.Fatalf("HybridSearch: %v", err)
+	}
+
+	t.Logf("Query: 'application server configuration'")
+	for i, r := range results {
+		t.Logf("  #%d [%.4f] imp=%d acc=%d %s", i+1, r.Score, r.Memory.Importance, r.Memory.AccessCount, r.Memory.Content)
+	}
+
+	// Find positions of both ranking memories
+	highPos, lowPos := -1, -1
+	for i, r := range results {
+		if r.Memory.ID == "test-s-rank-high" {
+			highPos = i
+		}
+		if r.Memory.ID == "test-s-rank-low" {
+			lowPos = i
+		}
+	}
+
+	if highPos == -1 || lowPos == -1 {
+		t.Fatalf("Both ranking memories should appear: high=%d, low=%d", highPos, lowPos)
+	}
+
+	if highPos >= lowPos {
+		t.Errorf("High importance memory (pos=%d) should rank above low importance (pos=%d)", highPos, lowPos)
 	}
 }
 

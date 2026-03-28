@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased] - 2026-03-28 (Alessandro Bartoli)
 
+### Added
+
+- Spaced repetition engine with lazy temporal decay and recall-based boosting
+- `EffectiveImportance()` method on `Memory`: computes decayed importance + access boost, clamped to [1, 10]
+- `MemoryConfig` fields: `vector_weight`, `fts_weight`, `importance_weight`, `access_boost_factor`, `access_boost_cap`
+- Importance as a third scoring signal in `HybridSearch` (default weight 0.15)
+- `UpdateAccess` now recalculates and persists importance using spaced repetition formula
+- Unit tests for decay math (6 cases: no decay, 1/3 weeks, boost, boost cap, floor)
+- Integration tests: `TestUpdateAccess_PersistsNewImportance`, `TestHybridSearch_ImportanceAffectsRanking`
+- README section documenting spaced repetition: formula, decay examples, search weights, tuning guide
+
+### Changed
+
+- `NewStore` now accepts `config.MemoryConfig` for decay/boost parameters
+- `mergeResults` signature extended with importance weight and decay parameters
+
 ### Security
 
 - Redis bound to `127.0.0.1` with `requirepass` via `AGENTMEM_REDIS_PASSWORD` env var

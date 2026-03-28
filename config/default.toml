@@ -38,6 +38,11 @@ default_importance = 5
 auto_decay = true
 decay_interval = "168h"
 decay_factor = 0.9
+vector_weight = 0.60       # semantic search weight in hybrid scoring
+fts_weight = 0.25          # keyword search weight in hybrid scoring
+importance_weight = 0.15   # memory importance weight in hybrid scoring
+access_boost_factor = 0.3  # points gained per recall
+access_boost_cap = 2.0     # max boost from recalls
 
 [session]
 auto_summarize = true
