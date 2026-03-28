@@ -6,8 +6,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"os"
+	"time"
 
 	"github.com/alle-bartoli/agentmem/internal/config"
 )
@@ -34,7 +36,7 @@ func NewClaudeCompressor(cfg config.CompressorClaudeConfig) (*ClaudeCompressor, 
 	return &ClaudeCompressor{
 		apiKey: apiKey,
 		model:  model,
-		client: &http.Client{},
+		client: &http.Client{Timeout: 30 * time.Second}, // Security: prevent hanging connections
 	}, nil
 }
 
@@ -88,13 +90,15 @@ func (c *ClaudeCompressor) Compress(ctx context.Context, observations string) (*
 	}
 	defer resp.Body.Close()
 
-	respBody, err := io.ReadAll(resp.Body)
+	// Security: cap response body at 10MB to prevent memory exhaustion
+	respBody, err := io.ReadAll(io.LimitReader(resp.Body, 10<<20))
 	if err != nil {
 		return nil, fmt.Errorf("read response: %w", err)
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("anthropic API error (status %d): %s", resp.StatusCode, string(respBody))
+		log.Printf("anthropic API error (status %d): %s", resp.StatusCode, string(respBody)) // Security: log full error internally
+		return nil, fmt.Errorf("compressor service error (status %d)", resp.StatusCode)     // Security: return generic error to caller
 	}
 
 	var result claudeResponse

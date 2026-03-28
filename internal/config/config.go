@@ -15,6 +15,7 @@ type RedisConfig struct {
 	Addr     string `toml:"addr"`
 	Password string `toml:"password"`
 	DB       int    `toml:"db"`
+	TLS      bool   `toml:"tls"`
 }
 
 // CompressorClaudeConfig holds Anthropic API settings.
@@ -105,7 +106,7 @@ func EnsureConfigDir() error {
 		return fmt.Errorf("get home dir: %w", err)
 	}
 	dir := filepath.Join(home, ".agentmem")
-	return os.MkdirAll(dir, 0o755)
+	return os.MkdirAll(dir, 0o700) // Security: restrict dir to owner only
 }
 
 // Load reads and parses a TOML config file.
@@ -115,8 +116,8 @@ func Load(path string) (*Config, error) {
 		return nil, fmt.Errorf("read config %s: %w", path, err)
 	}
 
-	// Expand environment variables in the TOML content
-	expanded := os.ExpandEnv(string(data))
+	// Security: expand only allowed env vars, not arbitrary ones
+	expanded := expandAllowedEnv(string(data))
 
 	cfg := &Config{
 		Redis: RedisConfig{
@@ -152,4 +153,21 @@ func Load(path string) (*Config, error) {
 	}
 
 	return cfg, nil
+}
+
+// Security: only these env vars are expanded in config TOML
+var allowedEnvVars = map[string]bool{
+	"ANTHROPIC_API_KEY":       true,
+	"OPENAI_API_KEY":          true,
+	"HOME":                    true,
+	"AGENTMEM_REDIS_PASSWORD": true,
+}
+
+func expandAllowedEnv(s string) string {
+	return os.Expand(s, func(key string) string {
+		if allowedEnvVars[key] {
+			return os.Getenv(key)
+		}
+		return "$" + key
+	})
 }

@@ -25,7 +25,8 @@ type LocalEmbedder struct {
 // Downloads the model from HuggingFace on first use.
 func NewLocalEmbedder(cfg config.EmbeddingLocalConfig, dimension int) (*LocalEmbedder, error) {
 	modelDir := expandHome(cfg.ModelDir)
-	if err := os.MkdirAll(modelDir, 0o755); err != nil {
+	// Security: restrict model dir to owner only
+	if err := os.MkdirAll(modelDir, 0o700); err != nil {
 		return nil, fmt.Errorf("create model dir: %w", err)
 	}
 

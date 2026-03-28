@@ -35,9 +35,10 @@ The stack: Go binary over stdio (JSON-RPC), Redis Stack (Hashes + RediSearch), e
 - Go 1.21 or higher
 - Docker and Docker Compose
 - Redis Stack 7.2+ (provided via `docker-compose.yml`)
-- API keys (optional when using `local` providers):
-  - `ANTHROPIC_API_KEY` (for compressor if using Claude)
-  - `OPENAI_API_KEY` (for embeddings if using OpenAI)
+- Environment variables:
+  - `AGENTMEM_REDIS_PASSWORD` (Redis auth, default: `changeme`)
+  - `ANTHROPIC_API_KEY` (optional, for Claude compressor)
+  - `OPENAI_API_KEY` (optional, for OpenAI embeddings)
 - An MCP-compatible client (e.g. Claude Code, Cursor, Windsurf)
 
 ## Quick Start
@@ -59,11 +60,12 @@ make mcp-register
 /mcp
 ```
 
-Configure API keys in your environment:
+Configure environment variables:
 
 ```bash
-export ANTHROPIC_API_KEY="sk-ant-..."
-export OPENAI_API_KEY="sk-..."
+export ANTHROPIC_API_KEY="sk-ant-..."     # Required for Claude compressor
+export OPENAI_API_KEY="sk-..."            # Required for OpenAI embeddings
+export AGENTMEM_REDIS_PASSWORD="secret"   # Redis auth (default: changeme)
 ```
 
 Edit `~/.agentmem/config.toml` to customize providers and behavior.
@@ -79,7 +81,6 @@ Key settings:
 - `memory.auto_decay`: Enable temporal decay (default: `true`)
 - `session.max_recall_items`: Limit recalled memories (default: `20`)
 
-
 ## MCP Tools
 
 | Tool            | Description                                                  |
@@ -92,7 +93,6 @@ Key settings:
 | `end_session`   | Close session with automatic summarization                   |
 | `list_projects` | List all projects with memory counts                         |
 | `memory_stats`  | Get statistics (total memories, types, avg importance)       |
-
 
 ## Architecture
 
@@ -129,7 +129,6 @@ agentmem/
 ├── config/              # Default config template
 └── docs/                # Architecture, tools reference, setup
 ```
-
 
 ## Development
 

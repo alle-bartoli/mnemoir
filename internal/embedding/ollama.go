@@ -6,7 +6,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
+	"net/url"
+	"time"
 
 	"github.com/alle-bartoli/agentmem/internal/config"
 )
@@ -31,12 +34,29 @@ func NewOllamaEmbedder(cfg config.EmbeddingOllamaConfig, dimension int) (*Ollama
 		model = "nomic-embed-text"
 	}
 
+	// Security: prevent SSRF by restricting to localhost
+	if err := validateOllamaURL(url); err != nil {
+		return nil, err
+	}
+
 	return &OllamaEmbedder{
 		url:       url,
 		model:     model,
 		dimension: dimension,
-		client:    &http.Client{},
+		client:    &http.Client{Timeout: 30 * time.Second}, // Security: prevent hanging connections
 	}, nil
+}
+
+func validateOllamaURL(rawURL string) error {
+	u, err := url.Parse(rawURL)
+	if err != nil {
+		return fmt.Errorf("invalid ollama URL: %w", err)
+	}
+	host := u.Hostname()
+	if host != "localhost" && host != "127.0.0.1" && host != "::1" {
+		return fmt.Errorf("ollama URL must point to localhost, got %q", host)
+	}
+	return nil
 }
 
 type ollamaEmbedRequest struct {
@@ -72,13 +92,15 @@ func (e *OllamaEmbedder) Embed(ctx context.Context, text string) ([]float32, err
 	}
 	defer resp.Body.Close()
 
-	respBody, err := io.ReadAll(resp.Body)
+	// Security: cap response body at 10MB to prevent memory exhaustion
+	respBody, err := io.ReadAll(io.LimitReader(resp.Body, 10<<20))
 	if err != nil {
 		return nil, fmt.Errorf("read response: %w", err)
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("ollama API error (status %d): %s", resp.StatusCode, string(respBody))
+		log.Printf("ollama embedding API error (status %d): %s", resp.StatusCode, string(respBody)) // Security: log full error internally
+		return nil, fmt.Errorf("embedding service error (status %d)", resp.StatusCode)              // Security: return generic error to caller
 	}
 
 	var result ollamaEmbedResponse

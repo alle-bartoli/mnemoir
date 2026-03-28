@@ -3,6 +3,7 @@ package redis
 
 import (
 	"context"
+	"crypto/tls"
 	"fmt"
 
 	"github.com/alle-bartoli/agentmem/internal/config"
@@ -16,12 +17,17 @@ type Client struct {
 
 // NewClient creates a new Redis client from config.
 func NewClient(cfg config.RedisConfig) (*Client, error) {
-	rdb := redis.NewClient(&redis.Options{
+	opts := &redis.Options{
 		Addr:     cfg.Addr,
 		Password: cfg.Password,
 		DB:       cfg.DB,
 		PoolSize: 10,
-	})
+	}
+	// Security: optional TLS with minimum TLS 1.2 for encrypted connections
+	if cfg.TLS {
+		opts.TLSConfig = &tls.Config{MinVersion: tls.VersionTLS12}
+	}
+	rdb := redis.NewClient(opts)
 
 	return &Client{rdb: rdb}, nil
 }

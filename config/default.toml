@@ -1,6 +1,6 @@
 [redis]
 addr = "localhost:6379"
-password = ""
+password = "changeme" # override via AGENTMEM_REDIS_PASSWORD env var
 db = 0
 
 [compressor]

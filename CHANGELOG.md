@@ -5,6 +5,26 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased] - 2026-03-28 (Alessandro Bartoli)
+
+### Security
+
+- Redis bound to `127.0.0.1` with `requirepass` via `AGENTMEM_REDIS_PASSWORD` env var
+- TAG injection prevented via `ValidateTagValue` allowlist regex at handler boundary
+- `os.ExpandEnv` replaced with allowlist (`expandAllowedEnv`) for `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `HOME`, `AGENTMEM_REDIS_PASSWORD`
+- HTTP client timeout (30s) on all external API calls (OpenAI, Ollama, Anthropic)
+- `sync.Mutex` on `activeSession` to prevent race conditions
+- Input length validation (`content` 50KB, `query` 4KB, `project` 128, `tags` 1KB)
+- FTS query injection: added missing escape chars (`\`, `"`, `'`, `$`, `#`) to `escapeQueryText`
+- API error responses sanitized: full body logged internally, generic message returned
+- Optional TLS on Redis connection via `redis.tls` config
+- SSRF prevention: Ollama URL validated to localhost only
+- Compression error details removed from session summary, logged internally
+- ULID entropy switched from `math/rand` to `crypto/rand`
+- Config and model directories created with `0700` instead of `0755`
+- API response reads capped at 10MB via `io.LimitReader`
+- `DeleteByFilter` loops in batches of 1000 instead of capping at 10,000
+
 ## [Unreleased] - 2026-03-25 (Alessandro Bartoli)
 
 ### Added

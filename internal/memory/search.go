@@ -165,7 +165,8 @@ func buildFTSQuery(text string, filters SearchFilters) string {
 // @dev escapeQueryText prefixes RediSearch special characters with backslash.
 // Without escaping, user input like "port:6379" would be parsed as field syntax.
 func escapeQueryText(s string) string {
-	special := []byte{'@', '!', '{', '}', '(', ')', '|', '-', '=', '>', '[', ']', ':', ';', '~', '*'}
+	// Security: escape all RediSearch special chars to prevent FTS query injection
+	special := []byte{'@', '!', '{', '}', '(', ')', '|', '-', '=', '>', '[', ']', ':', ';', '~', '*', '\\', '"', '\'', '$', '#'}
 	result := make([]byte, 0, len(s)*2)
 	for i := 0; i < len(s); i++ {
 		if slices.Contains(special, s[i]) {

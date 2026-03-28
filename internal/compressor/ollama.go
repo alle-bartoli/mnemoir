@@ -6,7 +6,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
+	"net/url"
+	"time"
 
 	"github.com/alle-bartoli/agentmem/internal/config"
 )
@@ -30,11 +33,28 @@ func NewOllamaCompressor(cfg config.CompressorOllamaConfig) (*OllamaCompressor, 
 		model = "llama3.2"
 	}
 
+	// Security: prevent SSRF by restricting to localhost
+	if err := validateOllamaURL(url); err != nil {
+		return nil, err
+	}
+
 	return &OllamaCompressor{
 		url:    url,
 		model:  model,
-		client: &http.Client{},
+		client: &http.Client{Timeout: 30 * time.Second}, // Security: prevent hanging connections
 	}, nil
+}
+
+func validateOllamaURL(rawURL string) error {
+	u, err := url.Parse(rawURL)
+	if err != nil {
+		return fmt.Errorf("invalid ollama URL: %w", err)
+	}
+	host := u.Hostname()
+	if host != "localhost" && host != "127.0.0.1" && host != "::1" {
+		return fmt.Errorf("ollama URL must point to localhost, got %q", host)
+	}
+	return nil
 }
 
 type ollamaGenerateRequest struct {
@@ -74,13 +94,15 @@ func (c *OllamaCompressor) Compress(ctx context.Context, observations string) (*
 	}
 	defer resp.Body.Close()
 
-	respBody, err := io.ReadAll(resp.Body)
+	// Security: cap response body at 10MB to prevent memory exhaustion
+	respBody, err := io.ReadAll(io.LimitReader(resp.Body, 10<<20))
 	if err != nil {
 		return nil, fmt.Errorf("read response: %w", err)
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("ollama API error (status %d): %s", resp.StatusCode, string(respBody))
+		log.Printf("ollama compressor API error (status %d): %s", resp.StatusCode, string(respBody)) // Security: log full error internally
+		return nil, fmt.Errorf("compressor service error (status %d)", resp.StatusCode)               // Security: return generic error to caller
 	}
 
 	var result ollamaGenerateResponse

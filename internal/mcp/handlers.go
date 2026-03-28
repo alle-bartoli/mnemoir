@@ -2,10 +2,12 @@ package mcp
 
 import (
 	"context"
+	"crypto/rand"
 	"encoding/json"
 	"fmt"
-	"math/rand"
+	"log"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/alle-bartoli/agentmem/internal/compressor"
@@ -15,13 +17,28 @@ import (
 	"github.com/oklog/ulid/v2"
 )
 
+// Security: input length limits prevent oversized payloads
+const (
+	maxContentLen = 50_000 // 50KB
+	maxQueryLen   = 4_000  // 4KB
+	maxProjectLen = 128
+	maxTagsLen    = 1_000
+)
+
+func validateLength(name, value string, max int) error {
+	if len(value) > max {
+		return fmt.Errorf("%s exceeds max length (%d > %d)", name, len(value), max)
+	}
+	return nil
+}
+
 // Handlers implements all MCP tool handlers.
 type Handlers struct {
 	store      *memory.Store
 	compressor compressor.ICompressor
 	cfg        *config.Config
 
-	// Current active session state
+	mu            sync.Mutex // Security: protects activeSession from concurrent access
 	activeSession *memory.Session
 }
 
@@ -30,6 +47,9 @@ func (h *Handlers) StoreMemory(ctx context.Context, req mcp.CallToolRequest) (*m
 	content, err := req.RequireString("content")
 	if err != nil {
 		return mcp.NewToolResultError("content is required"), nil
+	}
+	if err := validateLength("content", content, maxContentLen); err != nil {
+		return mcp.NewToolResultError(err.Error()), nil
 	}
 
 	memType, err := req.RequireString("type")
@@ -45,6 +65,12 @@ func (h *Handlers) StoreMemory(ctx context.Context, req mcp.CallToolRequest) (*m
 	if err != nil {
 		return mcp.NewToolResultError("project is required"), nil
 	}
+	if err := memory.ValidateTagValue(project); err != nil {
+		return mcp.NewToolResultError(err.Error()), nil
+	}
+	if err := validateLength("project", project, maxProjectLen); err != nil {
+		return mcp.NewToolResultError(err.Error()), nil
+	}
 
 	tags := req.GetString("tags", "")
 	importance := req.GetInt("importance", h.cfg.Memory.DefaultImportance)
@@ -52,10 +78,12 @@ func (h *Handlers) StoreMemory(ctx context.Context, req mcp.CallToolRequest) (*m
 	now := time.Now().Unix()
 	id := newULID()
 
+	h.mu.Lock()
 	sessionID := ""
 	if h.activeSession != nil {
 		sessionID = h.activeSession.ID
 	}
+	h.mu.Unlock()
 
 	mem := &memory.Memory{
 		ID:           id,
@@ -89,11 +117,25 @@ func (h *Handlers) Recall(ctx context.Context, req mcp.CallToolRequest) (*mcp.Ca
 	if err != nil {
 		return mcp.NewToolResultError("query is required"), nil
 	}
+	if err := validateLength("query", query, maxQueryLen); err != nil {
+		return mcp.NewToolResultError(err.Error()), nil
+	}
 
 	project := req.GetString("project", "")
 	memType := req.GetString("type", "")
 	limit := req.GetInt("limit", 10)
 	searchMode := req.GetString("search_mode", "hybrid")
+
+	if project != "" {
+		if err := memory.ValidateTagValue(project); err != nil {
+			return mcp.NewToolResultError(err.Error()), nil
+		}
+	}
+	if memType != "" {
+		if err := memory.ValidateTagValue(memType); err != nil {
+			return mcp.NewToolResultError(err.Error()), nil
+		}
+	}
 
 	filters := memory.SearchFilters{
 		Project: project,
@@ -141,6 +183,12 @@ func (h *Handlers) Forget(ctx context.Context, req mcp.CallToolRequest) (*mcp.Ca
 	project := req.GetString("project", "")
 	olderThan := req.GetString("older_than", "")
 
+	if project != "" {
+		if err := memory.ValidateTagValue(project); err != nil {
+			return mcp.NewToolResultError(err.Error()), nil
+		}
+	}
+
 	if id == "" && project == "" && olderThan == "" {
 		return mcp.NewToolResultError("at least one of id, project, or older_than is required"), nil
 	}
@@ -182,6 +230,9 @@ func (h *Handlers) StartSession(ctx context.Context, req mcp.CallToolRequest) (*
 	if err != nil {
 		return mcp.NewToolResultError("project is required"), nil
 	}
+	if err := memory.ValidateTagValue(project); err != nil {
+		return mcp.NewToolResultError(err.Error()), nil
+	}
 
 	sessionID := newULID()
 	now := time.Now().Unix()
@@ -196,7 +247,9 @@ func (h *Handlers) StartSession(ctx context.Context, req mcp.CallToolRequest) (*
 		return nil, fmt.Errorf("save session: %w", saveErr)
 	}
 
+	h.mu.Lock()
 	h.activeSession = sess
+	h.mu.Unlock()
 
 	// Retrieve previous session summary
 	var previousSummary string
@@ -228,7 +281,12 @@ func (h *Handlers) StartSession(ctx context.Context, req mcp.CallToolRequest) (*
 
 // EndSession handles the end_session tool.
 func (h *Handlers) EndSession(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-	if h.activeSession == nil {
+	h.mu.Lock()
+	sess := h.activeSession
+	h.activeSession = nil
+	h.mu.Unlock()
+
+	if sess == nil {
 		return mcp.NewToolResultError("no active session to end"), nil
 	}
 
@@ -242,30 +300,28 @@ func (h *Handlers) EndSession(ctx context.Context, req mcp.CallToolRequest) (*mc
 	if observations != "" && h.compressor != nil {
 		compressed, err := h.compressor.Compress(ctx, observations)
 		if err != nil {
-			// Log but don't fail the session end
-			summary += fmt.Sprintf("\n[compression failed: %v]", err)
+			log.Printf("compression failed: %v", err) // Security: log details internally
+			summary += "\n[compression failed]"           // Security: generic message in user-facing summary
 		} else {
-			memoriesCreated, _ = h.saveExtracted(ctx, compressed, h.activeSession.Project)
+			memoriesCreated, _ = h.saveExtracted(ctx, compressed, sess.Project)
 		}
 	}
 
 	// Update session
-	h.activeSession.EndedAt = now
-	h.activeSession.Summary = summary
-	h.activeSession.MemoryCount = memoriesCreated
+	sess.EndedAt = now
+	sess.Summary = summary
+	sess.MemoryCount = memoriesCreated
 
-	if err := h.store.SaveSession(ctx, h.activeSession); err != nil {
+	if err := h.store.SaveSession(ctx, sess); err != nil {
 		return nil, fmt.Errorf("update session: %w", err)
 	}
 
-	duration := now - h.activeSession.StartedAt
+	duration := now - sess.StartedAt
 
 	result := map[string]any{
 		"memories_created": memoriesCreated,
 		"session_duration": duration,
 	}
-
-	h.activeSession = nil
 
 	return jsonResult(result)
 }
@@ -292,6 +348,11 @@ func (h *Handlers) ListProjects(ctx context.Context, req mcp.CallToolRequest) (*
 // MemoryStats handles the memory_stats tool.
 func (h *Handlers) MemoryStats(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 	project := req.GetString("project", "")
+	if project != "" {
+		if err := memory.ValidateTagValue(project); err != nil {
+			return mcp.NewToolResultError(err.Error()), nil
+		}
+	}
 
 	stats, err := h.store.GetStats(ctx, project)
 	if err != nil {
@@ -345,10 +406,12 @@ func (h *Handlers) saveExtracted(ctx context.Context, cr *compressor.CompressRes
 	count := 0
 	now := time.Now().Unix()
 
+	h.mu.Lock()
 	sessionID := ""
 	if h.activeSession != nil {
 		sessionID = h.activeSession.ID
 	}
+	h.mu.Unlock()
 
 	save := func(items []compressor.ExtractedMemory, memType memory.MemoryType) {
 		for _, item := range items {
@@ -377,9 +440,9 @@ func (h *Handlers) saveExtracted(ctx context.Context, cr *compressor.CompressRes
 	return count, nil
 }
 
+// Security: use crypto/rand instead of math/rand for unpredictable IDs
 func newULID() string {
-	entropy := rand.New(rand.NewSource(time.Now().UnixNano()))
-	return ulid.MustNew(ulid.Timestamp(time.Now()), ulid.Monotonic(entropy, 0)).String()
+	return ulid.MustNew(ulid.Timestamp(time.Now()), rand.Reader).String()
 }
 
 func parseDuration(s string) (time.Duration, error) {

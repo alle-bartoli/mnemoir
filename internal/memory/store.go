@@ -5,12 +5,25 @@ import (
 	"encoding/binary"
 	"fmt"
 	"math"
+	"regexp"
 	"strconv"
 	"time"
 
 	"github.com/alle-bartoli/agentmem/internal/embedding"
 	goredis "github.com/redis/go-redis/v9"
 )
+
+// Security: allowlist regex prevents RediSearch TAG injection
+var validTagValue = regexp.MustCompile(`^[a-zA-Z0-9_\-\.]+$`)
+
+// ValidateTagValue rejects values containing RediSearch special characters.
+// Called at the handler boundary before any query is built.
+func ValidateTagValue(s string) error {
+	if !validTagValue.MatchString(s) {
+		return fmt.Errorf("invalid value %q: only alphanumeric, underscore, hyphen, dot allowed", s)
+	}
+	return nil
+}
 
 // Store handles memory CRUD operations backed by Redis.
 type Store struct {
@@ -84,36 +97,40 @@ func (s *Store) Delete(ctx context.Context, id string) error {
 }
 
 // DeleteByFilter removes memories matching project and/or age criteria.
+// Processes in batches of 1000 to avoid the 10k FT.SEARCH cap.
 func (s *Store) DeleteByFilter(ctx context.Context, project string, olderThan time.Duration) (int, error) {
 	query := buildFilterQuery(project, olderThan)
-	args := []any{"FT.SEARCH", "idx:memories", query, "NOCONTENT", "LIMIT", 0, 10000}
+	totalDeleted := 0
 
-	res, err := s.rdb.Do(ctx, args...).Result()
-	if err != nil {
-		return 0, fmt.Errorf("search for deletion: %w", err)
-	}
+	for {
+		args := []any{"FT.SEARCH", "idx:memories", query, "NOCONTENT", "LIMIT", 0, 1000}
+		res, err := s.rdb.Do(ctx, args...).Result()
+		if err != nil {
+			return totalDeleted, fmt.Errorf("search for deletion: %w", err)
+		}
 
-	ids := extractIDsFromSearch(res)
-	if len(ids) == 0 {
-		return 0, nil
-	}
+		ids := extractIDsFromSearch(res)
+		if len(ids) == 0 {
+			break
+		}
 
-	pipe := s.rdb.Pipeline()
-	for _, id := range ids {
-		pipe.Del(ctx, id)
-	}
-	cmds, err := pipe.Exec(ctx)
-	if err != nil {
-		return 0, fmt.Errorf("bulk delete: %w", err)
-	}
+		pipe := s.rdb.Pipeline()
+		for _, id := range ids {
+			pipe.Del(ctx, id)
+		}
+		cmds, err := pipe.Exec(ctx)
+		if err != nil {
+			return totalDeleted, fmt.Errorf("bulk delete: %w", err)
+		}
 
-	count := 0
-	for _, cmd := range cmds {
-		if cmd.(*goredis.IntCmd).Val() > 0 {
-			count++
+		for _, cmd := range cmds {
+			if cmd.(*goredis.IntCmd).Val() > 0 {
+				totalDeleted++
+			}
 		}
 	}
-	return count, nil
+
+	return totalDeleted, nil
 }
 
 // UpdateAccess increments access_count and updates last_accessed.
