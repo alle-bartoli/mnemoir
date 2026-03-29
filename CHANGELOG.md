@@ -22,6 +22,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - `NewStore` now accepts `config.MemoryConfig` for decay/boost parameters
 - `mergeResults` signature extended with importance weight and decay parameters
+- Moved all tests from `internal/` to `test/` directory mirroring module structure
+- Tests converted to black-box (`package X_test`) using only exported API
+- Grouped flat test functions under parent `t.Run` subtests (`TestStore/*`, `TestVectorSearch/*`, etc.)
+- Shared fixtures extracted into `helpers_test.go` per test package
 
 ### Security
 
