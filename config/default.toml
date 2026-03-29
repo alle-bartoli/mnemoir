@@ -50,3 +50,10 @@ max_recall_items = 20
 
 [server]
 health_addr = "" # e.g. ":9090" to enable /healthz endpoint, empty to disable
+
+[maintenance]
+enabled = true
+forget_threshold = 2.0         # delete memories with effective importance <= this
+forget_inactive_days = 90      # only if not accessed in this many days
+max_sessions_per_project = 50  # keep N most recent sessions, prune older ones
+min_run_interval = "1h"        # skip if maintenance ran less than this ago

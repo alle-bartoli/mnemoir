@@ -1,7 +1,10 @@
 package memory_test
 
 import (
+	"bufio"
 	"context"
+	"os"
+	"strings"
 	"testing"
 	"time"
 
@@ -16,6 +19,36 @@ const (
 	testProject       = "test-store"
 	searchTestProject = "test-search"
 )
+
+// redisPassword reads MNEMOIR_REDIS_PASSWORD from env, falling back to .env file at project root.
+func redisPassword() string {
+	if pw := os.Getenv("MNEMOIR_REDIS_PASSWORD"); pw != "" {
+		return pw
+	}
+	// Walk up from test/memory/ to find .env at project root
+	for _, path := range []string{"../../.env", "../../../.env"} {
+		f, err := os.Open(path)
+		if err != nil {
+			continue
+		}
+		defer f.Close()
+		scanner := bufio.NewScanner(f)
+		for scanner.Scan() {
+			line := strings.TrimSpace(scanner.Text())
+			if strings.HasPrefix(line, "MNEMOIR_REDIS_PASSWORD=") {
+				return strings.TrimPrefix(line, "MNEMOIR_REDIS_PASSWORD=")
+			}
+		}
+	}
+	return ""
+}
+
+func newRedisClient() *goredis.Client {
+	return goredis.NewClient(&goredis.Options{
+		Addr:     "localhost:6379",
+		Password: redisPassword(),
+	})
+}
 
 var defaultMemCfg = config.MemoryConfig{
 	DefaultImportance: 5,
@@ -34,7 +67,7 @@ var defaultMemCfg = config.MemoryConfig{
 func newTestStore(t *testing.T) *memory.Store {
 	t.Helper()
 
-	rdb := goredis.NewClient(&goredis.Options{Addr: "localhost:6379"})
+	rdb := newRedisClient()
 	ctx := context.Background()
 	if err := rdb.Ping(ctx).Err(); err != nil {
 		t.Skipf("Redis not available: %v", err)
@@ -74,13 +107,13 @@ func newTestStore(t *testing.T) *memory.Store {
 func newSearchTestStore(t *testing.T) (*memory.Store, *goredis.Client) {
 	t.Helper()
 
-	rdb := goredis.NewClient(&goredis.Options{Addr: "localhost:6379"})
+	rdb := newRedisClient()
 	ctx := context.Background()
 	if err := rdb.Ping(ctx).Err(); err != nil {
 		t.Skipf("Redis not available: %v", err)
 	}
 
-	rc, err := redisclient.NewClient(config.RedisConfig{Addr: "localhost:6379"})
+	rc, err := redisclient.NewClient(config.RedisConfig{Addr: "localhost:6379", Password: redisPassword()})
 	if err != nil {
 		t.Fatalf("NewClient: %v", err)
 	}

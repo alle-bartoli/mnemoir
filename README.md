@@ -346,7 +346,7 @@ See [docs/agent-instructions.md](docs/agent-instructions.md) for a ready-to-copy
 - [ ] **CI integration tests**: run Redis-dependent tests in GitHub Actions with a Redis Stack service container
 - [ ] **Cross-project recall**: search memories across all projects in a single query
 - [ ] **Memory export/import**: dump and restore memories as JSON for backup or migration
-- [ ] **TTL-based auto-forget**: automatically delete memories below a configurable importance threshold
+- [x] **Auto-maintenance**: automatic cleanup on `start_session` (auto-forget stale low-importance memories, session pruning, orphan cleanup)
 
 ## License
 

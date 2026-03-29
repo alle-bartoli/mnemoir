@@ -302,6 +302,23 @@ func (h *Handlers) StartSession(ctx context.Context, req mcp.CallToolRequest) (*
 		return nil, fmt.Errorf("save session: %w", saveErr)
 	}
 
+	// Run maintenance before loading context so forgotten memories don't appear
+	var maintResult *memory.MaintenanceResult
+	if h.cfg.Maintenance.Enabled {
+		mr, err := h.store.RunMaintenance(ctx, project, h.cfg.Maintenance, h.cfg.Memory)
+		if err != nil {
+			slog.Warn("maintenance failed", "project", project, "error", err)
+		} else if !mr.Skipped {
+			slog.Info("maintenance completed",
+				"project", project,
+				"forgotten", mr.ForgottenCount,
+				"pruned_sessions", mr.PrunedSessions,
+				"orphan_cleaned", mr.OrphanCleaned,
+			)
+			maintResult = mr
+		}
+	}
+
 	// Retrieve previous session summary
 	var previousSummary string
 	lastSess, err := h.store.GetLastSession(ctx, project)
@@ -326,6 +343,13 @@ func (h *Handlers) StartSession(ctx context.Context, req mcp.CallToolRequest) (*
 		"session_id":       sessionID,
 		"previous_summary": previousSummary,
 		"key_memories":     keyMemories,
+	}
+	if maintResult != nil {
+		result["maintenance"] = map[string]any{
+			"forgotten_count": maintResult.ForgottenCount,
+			"pruned_sessions": maintResult.PrunedSessions,
+			"orphan_cleaned":  maintResult.OrphanCleaned,
+		}
 	}
 	return jsonResult(result)
 }

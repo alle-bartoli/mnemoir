@@ -91,14 +91,29 @@ type ServerConfig struct {
 	HealthAddr string `toml:"health_addr"` // e.g. ":9090", empty to disable
 }
 
+// MaintenanceConfig holds automatic cleanup settings.
+type MaintenanceConfig struct {
+	Enabled              bool    `toml:"enabled"`
+	ForgetThreshold      float64 `toml:"forget_threshold"`       // effective importance <= this
+	ForgetInactiveDays   int     `toml:"forget_inactive_days"`   // days since last access
+	MaxSessionsPerProject int    `toml:"max_sessions_per_project"`
+	MinRunInterval       string  `toml:"min_run_interval"`       // e.g. "1h"
+}
+
+// ParsedMinRunInterval returns the minimum interval between maintenance runs.
+func (m MaintenanceConfig) ParsedMinRunInterval() (time.Duration, error) {
+	return time.ParseDuration(m.MinRunInterval)
+}
+
 // Config is the root configuration struct.
 type Config struct {
-	Redis      RedisConfig      `toml:"redis"`
-	Compressor CompressorConfig `toml:"compressor"`
-	Embedding  EmbeddingConfig  `toml:"embedding"`
-	Memory     MemoryConfig     `toml:"memory"`
-	Session    SessionConfig    `toml:"session"`
-	Server     ServerConfig     `toml:"server"`
+	Redis       RedisConfig       `toml:"redis"`
+	Compressor  CompressorConfig  `toml:"compressor"`
+	Embedding   EmbeddingConfig   `toml:"embedding"`
+	Memory      MemoryConfig      `toml:"memory"`
+	Session     SessionConfig     `toml:"session"`
+	Server      ServerConfig      `toml:"server"`
+	Maintenance MaintenanceConfig `toml:"maintenance"`
 }
 
 // DefaultConfigPath returns ~/.mnemoir/config.toml.
@@ -162,6 +177,13 @@ func Load(path string) (*Config, error) {
 			AutoSummarize:  true,
 			MaxRecallItems: 20,
 		},
+		Maintenance: MaintenanceConfig{
+			Enabled:              true,
+			ForgetThreshold:      2.0,
+			ForgetInactiveDays:   90,
+			MaxSessionsPerProject: 50,
+			MinRunInterval:       "1h",
+		},
 	}
 
 	if err := toml.Unmarshal([]byte(expanded), cfg); err != nil {
@@ -217,6 +239,22 @@ func (c *Config) Validate() error {
 	// Session
 	if c.Session.MaxRecallItems <= 0 {
 		return fmt.Errorf("session.max_recall_items must be > 0 (got %d)", c.Session.MaxRecallItems)
+	}
+
+	// Maintenance
+	if c.Maintenance.Enabled {
+		if c.Maintenance.ForgetThreshold < 0 || c.Maintenance.ForgetThreshold > 10 {
+			return fmt.Errorf("maintenance.forget_threshold must be in [0, 10] (got %.1f)", c.Maintenance.ForgetThreshold)
+		}
+		if c.Maintenance.ForgetInactiveDays <= 0 {
+			return fmt.Errorf("maintenance.forget_inactive_days must be > 0 (got %d)", c.Maintenance.ForgetInactiveDays)
+		}
+		if c.Maintenance.MaxSessionsPerProject <= 0 {
+			return fmt.Errorf("maintenance.max_sessions_per_project must be > 0 (got %d)", c.Maintenance.MaxSessionsPerProject)
+		}
+		if _, err := time.ParseDuration(c.Maintenance.MinRunInterval); err != nil {
+			return fmt.Errorf("maintenance.min_run_interval is not a valid duration: %w", err)
+		}
 	}
 
 	return nil

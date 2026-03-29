@@ -31,6 +31,13 @@ func validConfig() *config.Config {
 			AutoSummarize:  true,
 			MaxRecallItems: 20,
 		},
+		Maintenance: config.MaintenanceConfig{
+			Enabled:               true,
+			ForgetThreshold:       2.0,
+			ForgetInactiveDays:    90,
+			MaxSessionsPerProject: 50,
+			MinRunInterval:        "1h",
+		},
 	}
 }
 
@@ -129,6 +136,55 @@ func TestValidate(t *testing.T) {
 		cfg.Memory.AccessBoostFactor = -1.0
 		if err := cfg.Validate(); err == nil {
 			t.Error("should reject negative access_boost_factor")
+		}
+	})
+
+	t.Run("MaintenanceThresholdOutOfRange", func(t *testing.T) {
+		cfg := validConfig()
+		cfg.Maintenance.ForgetThreshold = 11.0
+		if err := cfg.Validate(); err == nil {
+			t.Error("should reject forget_threshold > 10")
+		}
+	})
+
+	t.Run("MaintenanceNegativeThreshold", func(t *testing.T) {
+		cfg := validConfig()
+		cfg.Maintenance.ForgetThreshold = -1.0
+		if err := cfg.Validate(); err == nil {
+			t.Error("should reject negative forget_threshold")
+		}
+	})
+
+	t.Run("MaintenanceZeroInactiveDays", func(t *testing.T) {
+		cfg := validConfig()
+		cfg.Maintenance.ForgetInactiveDays = 0
+		if err := cfg.Validate(); err == nil {
+			t.Error("should reject forget_inactive_days <= 0")
+		}
+	})
+
+	t.Run("MaintenanceZeroMaxSessions", func(t *testing.T) {
+		cfg := validConfig()
+		cfg.Maintenance.MaxSessionsPerProject = 0
+		if err := cfg.Validate(); err == nil {
+			t.Error("should reject max_sessions_per_project <= 0")
+		}
+	})
+
+	t.Run("MaintenanceInvalidInterval", func(t *testing.T) {
+		cfg := validConfig()
+		cfg.Maintenance.MinRunInterval = "not-a-duration"
+		if err := cfg.Validate(); err == nil {
+			t.Error("should reject unparseable min_run_interval")
+		}
+	})
+
+	t.Run("MaintenanceDisabledSkipsValidation", func(t *testing.T) {
+		cfg := validConfig()
+		cfg.Maintenance.Enabled = false
+		cfg.Maintenance.ForgetThreshold = 999 // would be invalid if enabled
+		if err := cfg.Validate(); err != nil {
+			t.Errorf("disabled maintenance should skip validation: %v", err)
 		}
 	})
 
