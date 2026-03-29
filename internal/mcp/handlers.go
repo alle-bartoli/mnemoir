@@ -266,6 +266,18 @@ func (h *Handlers) StartSession(ctx context.Context, req mcp.CallToolRequest) (*
 		return mcp.NewToolResultError(err.Error()), nil
 	}
 
+	// Reject if a session is already active - call end_session first
+	h.mu.Lock()
+	if h.activeSession != nil {
+		active := h.activeSession
+		h.mu.Unlock()
+		return mcp.NewToolResultError(fmt.Sprintf(
+			"session %s (project %s) is already active, call end_session first",
+			active.ID, active.Project,
+		)), nil
+	}
+	h.mu.Unlock()
+
 	sessionID := newULID()
 	now := time.Now().Unix()
 

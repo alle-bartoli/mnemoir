@@ -1,4 +1,4 @@
-.PHONY: help build install uninstall test docker-up docker-down redis-ui setup mcp-register clean
+.PHONY: help build install uninstall test docker-up docker-down redis-ui setup mcp-register clean clean-data
 
 BINARY := agentmem
 BIN_DIR := bin
@@ -18,6 +18,7 @@ help:
 	@echo "  make setup         - Full setup (docker + build + config)"
 	@echo "  make mcp-register  - Register MCP server with Claude Code"
 	@echo "  make clean         - Remove build artifacts"
+	@echo "  make clean-data    - Stop Redis and wipe all stored memories (data/)"
 
 build:
 	CGO_ENABLED=0 go build -o $(BIN_DIR)/$(BINARY) $(CMD_DIR)
@@ -67,3 +68,7 @@ mcp-register: build
 
 clean:
 	rm -rf $(BIN_DIR)
+
+clean-data: docker-down
+	rm -rf data/
+	@echo "Redis data wiped. Run 'make docker-up' to start fresh."

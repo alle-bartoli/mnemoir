@@ -26,25 +26,120 @@ Fully offline-capable, no API keys required.
 ## Quick Start
 
 ```bash
+# Set Redis password
+export AGENTMEM_REDIS_PASSWORD="your-secret"
+
 # Start Redis Stack and build binary
 make setup
 
-# Register MCP server with your client
-make mcp-register
-
-# Verify registration (in your MCP client)
-/mcp
-```
-
-Configure environment variables:
-
-```bash
-export ANTHROPIC_API_KEY="sk-ant-..."     # Required for Claude compressor
-export OPENAI_API_KEY="sk-..."            # Required for OpenAI embeddings
-export AGENTMEM_REDIS_PASSWORD="secret"   # Redis auth (default: changeme)
+# Register with your MCP client (see below)
+make mcp-register   # Claude Code
 ```
 
 Edit `~/.agentmem/config.toml` to customize providers and behavior.
+
+Optional API keys (not needed with default `local` providers):
+
+```bash
+export ANTHROPIC_API_KEY="sk-ant-..."     # Only for Claude compressor
+export OPENAI_API_KEY="sk-..."            # Only for OpenAI embeddings
+```
+
+## MCP Client Registration
+
+Agentmem works with any MCP-compatible coding agent via stdio transport.
+
+### Claude Code
+
+```bash
+make mcp-register
+```
+
+Or manually:
+
+```bash
+claude mcp add --transport stdio agentmem -- /path/to/bin/agentmem --config ~/.agentmem/config.toml
+```
+
+### Cursor
+
+Settings > MCP Servers > Add new server:
+
+```json
+{
+  "mcpServers": {
+    "agentmem": {
+      "command": "/path/to/bin/agentmem",
+      "args": ["--config", "~/.agentmem/config.toml"]
+    }
+  }
+}
+```
+
+### Windsurf
+
+Settings > MCP > Add server:
+
+```json
+{
+  "mcpServers": {
+    "agentmem": {
+      "command": "/path/to/bin/agentmem",
+      "args": ["--config", "~/.agentmem/config.toml"]
+    }
+  }
+}
+```
+
+### Continue.dev
+
+Add to `~/.continue/config.json`:
+
+```json
+{
+  "mcpServers": [
+    {
+      "name": "agentmem",
+      "command": "/path/to/bin/agentmem",
+      "args": ["--config", "~/.agentmem/config.toml"]
+    }
+  ]
+}
+```
+
+### Cline (VS Code)
+
+Settings > MCP Servers > Add:
+
+```json
+{
+  "mcpServers": {
+    "agentmem": {
+      "command": "/path/to/bin/agentmem",
+      "args": ["--config", "~/.agentmem/config.toml"]
+    }
+  }
+}
+```
+
+### Zed
+
+Add to `~/.config/zed/settings.json`:
+
+```json
+{
+  "language_models": {
+    "mcp": {
+      "agentmem": {
+        "command": "/path/to/bin/agentmem",
+        "args": ["--config", "~/.agentmem/config.toml"]
+      }
+    }
+  }
+}
+```
+
+Replace `/path/to/bin/agentmem` with the actual binary path (e.g. the output of `which agentmem` after `make install`, or `$(pwd)/bin/agentmem` for local builds).
 
 ## Configuration
 
@@ -184,18 +279,48 @@ make docker-up    # Start Redis Stack
 make docker-down  # Stop Redis Stack
 make redis-ui     # Open RedisInsight web UI (http://localhost:8001)
 make clean        # Clean build artifacts
+make clean-data   # Stop Redis and wipe all stored memories (data/)
 make install      # Install to $GOPATH/bin
 make uninstall    # Remove binary, MCP registration, and config
 ```
+
+Redis data (RDB snapshots + AOF log) is persisted locally in `./data/`.
+This directory is gitignored and stays small under normal usage (tens of MB for thousands of memories).
+Redis is capped at 512MB via `maxmemory` with LRU eviction. Run `make clean-data` to reclaim disk space.
 
 ### RedisInsight
 
 Redis Stack includes RedisInsight on port `8001` (`make redis-ui`).
 
-- Browse memories (`mem:{ulid}` hashes)
-- Inspect search index (`idx:memories`)
-- Monitor queries in real-time (Profiler)
-- Run Redis commands (Workbench)
+- **Browser**: search `mem:*` to inspect memory hashes (content, type, project, tags, importance, timestamps)
+- **Browser**: search `session:*` for session hashes, `project_sessions:*` for sorted sets
+- **Profiler**: monitor queries from the MCP server in real-time
+- **Workbench**: run queries directly
+
+Useful Workbench queries:
+
+```redis
+-- All memories
+FT.SEARCH idx:memories "*"
+
+-- Filter by project
+FT.SEARCH idx:memories "@project:{my-project}"
+
+-- Filter by type
+FT.SEARCH idx:memories "@type:{fact}"
+
+-- Combined filters
+FT.SEARCH idx:memories "@project:{my-project} @type:{concept}"
+
+-- List all projects
+SMEMBERS projects
+
+-- Sessions for a project (most recent first)
+ZREVRANGE project_sessions:my-project 0 -1 WITHSCORES
+
+-- Memory count per project
+FT.AGGREGATE idx:memories "*" GROUPBY 1 @project REDUCE COUNT 0 AS count
+```
 
 ### Debugging with LazyVim/nvim-dap
 
@@ -204,6 +329,14 @@ Redis Stack includes RedisInsight on port `8001` (`make redis-ui`).
 3. Open a Go file: `nvim cmd/agentmem/main.go`
 4. Set breakpoint: `<leader>db`
 5. Start debugger: `<leader>dc` then select "Debug Package"
+
+## TODO
+
+- [ ] **Multi-session support**: allow concurrent sessions across different projects (currently one active session per process, `start_session` rejects if one is already active)
+- [ ] **CI integration tests**: run Redis-dependent tests in GitHub Actions with a Redis Stack service container
+- [ ] **Cross-project recall**: search memories across all projects in a single query
+- [ ] **Memory export/import**: dump and restore memories as JSON for backup or migration
+- [ ] **TTL-based auto-forget**: automatically delete memories below a configurable importance threshold
 
 ## License
 

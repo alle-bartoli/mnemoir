@@ -27,6 +27,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `TestValidateTagValue` and `TestValidMemoryType` pure unit tests (no Redis)
 - `TestStore/SessionSaveAndGetLast`, `GetLastSessionNoSessions`, `GetStats`, `GetTopMemories` integration tests
 - `TestHybridSearchSingleAccessCount` verifying single access increment per unique result
+- `make clean-data` target: stops Redis and wipes `./data/` to reclaim disk space
+- MCP client registration instructions in README for Claude Code, Cursor, Windsurf, Continue.dev, Cline, and Zed
+- RedisInsight Workbench query examples in README (search, filter, aggregate)
+- TODO section in README with roadmap items (multi-session, CI tests, cross-project recall, export/import, auto-forget)
 
 ### Changed
 
@@ -47,6 +51,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Test cleanup helpers now remove `session:test-*` keys and `project_sessions:{project}` sorted sets
 - Redis persistence switched from Docker named volume to local bind mount (`./data:/data`) for portability
 - `data/` added to `.gitignore`
+- `start_session` now rejects with an explicit error if a session is already active (prevents silent override)
 
 ### Security
 
