@@ -254,7 +254,7 @@ Client <--stdio/JSON-RPC--> mnemoir <--TCP--> Redis Stack
 | Embeddings | OpenAI / Ollama / Local     | `text-embedding-3-small` (1536d), `nomic-embed-text` (768d), or `all-MiniLM-L6-v2` (384d) |
 | Compressor | Claude API / Ollama / Local | Structured memory extraction from raw observations                                        |
 | IDs        | ULID                        | Chronologically sortable unique identifiers                                               |
-| Config     | TOML                        | `~/.mnemoir/config.toml`                                                                 |
+| Config     | TOML                        | `~/.mnemoir/config.toml`                                                                  |
 
 ### Directory structure
 
@@ -342,8 +342,7 @@ See [docs/agent-instructions.md](docs/agent-instructions.md) for a ready-to-copy
 
 ## TODO
 
-- [ ] **Multi-session support**: allow concurrent sessions across different projects (currently one active session per process, `start_session` rejects if one is already active)
-- [ ] **CI integration tests**: run Redis-dependent tests in GitHub Actions with a Redis Stack service container
+- [x] **Multi-session support**: each Claude Code instance spawns its own `mnemoir` process via stdio, so concurrent sessions across projects (or the same project) work naturally with no shared in-memory state
 - [ ] **Cross-project recall**: search memories across all projects in a single query
 - [ ] **Memory export/import**: dump and restore memories as JSON for backup or migration
 - [x] **Auto-maintenance**: automatic cleanup on `start_session` (auto-forget stale low-importance memories, session pruning, orphan cleanup)
