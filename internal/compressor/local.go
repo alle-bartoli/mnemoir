@@ -99,7 +99,7 @@ var (
 	// Fact patterns: file paths, ports, versions, URLs, IPs, env vars, config values
 	reFilePath   = regexp.MustCompile(`(?:/[\w.-]+){2,}`)
 	rePort       = regexp.MustCompile(`(?:port|PORT)\s*[:=]?\s*\d{2,5}|\b\d{2,5}/tcp\b`)
-	reVersion    = regexp.MustCompile(`v?\d+\.\d+(?:\.\d+)`)
+	reVersion    = regexp.MustCompile(`v?\d+\.\d+(?:\.\d+)?`)
 	reURL        = regexp.MustCompile(`https?://[^\s,)]+`)
 	reIP         = regexp.MustCompile(`\b\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\b`)
 	reEnvVar     = regexp.MustCompile(`\b[A-Z][A-Z0-9_]{2,}\b`)

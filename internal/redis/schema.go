@@ -69,22 +69,8 @@ func CheckIndexDimension(ctx context.Context, c *Client) (int, error) {
 	return parseDimensionFromInfo(res)
 }
 
-// parseDimensionFromInfo extracts DIM from FT.INFO result.
+// parseDimensionFromInfo extracts DIM from FT.INFO result by walking the typed structure.
 func parseDimensionFromInfo(info any) (int, error) {
-	infoStr := fmt.Sprintf("%v", info)
-	// Look for DIM in the info output
-	parts := strings.Split(infoStr, " ")
-	for i, part := range parts {
-		if strings.EqualFold(part, "DIM") && i+1 < len(parts) {
-			dim, err := strconv.Atoi(parts[i+1])
-			if err != nil {
-				continue
-			}
-			return dim, nil
-		}
-	}
-
-	// Alternative: walk the nested structure from go-redis
 	return parseDimensionNested(info)
 }
 

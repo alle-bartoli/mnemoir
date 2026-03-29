@@ -280,7 +280,6 @@ func (h *Handlers) StartSession(ctx context.Context, req mcp.CallToolRequest) (*
 			active.ID, active.Project,
 		)), nil
 	}
-	h.mu.Unlock()
 
 	sessionID := newULID()
 	now := time.Now().Unix()
@@ -291,13 +290,17 @@ func (h *Handlers) StartSession(ctx context.Context, req mcp.CallToolRequest) (*
 		StartedAt: now,
 	}
 
-	if saveErr := h.store.SaveSession(ctx, sess); saveErr != nil {
-		return nil, fmt.Errorf("save session: %w", saveErr)
-	}
-
-	h.mu.Lock()
+	// Set activeSession under lock before releasing, preventing TOCTOU race
 	h.activeSession = sess
 	h.mu.Unlock()
+
+	if saveErr := h.store.SaveSession(ctx, sess); saveErr != nil {
+		// Roll back on save failure
+		h.mu.Lock()
+		h.activeSession = nil
+		h.mu.Unlock()
+		return nil, fmt.Errorf("save session: %w", saveErr)
+	}
 
 	// Retrieve previous session summary
 	var previousSummary string
@@ -351,7 +354,11 @@ func (h *Handlers) EndSession(ctx context.Context, req mcp.CallToolRequest) (*mc
 			slog.Error("compression failed", "project", sess.Project, "error", err)
 			summary += "\n[compression failed]"           // Security: generic message in user-facing summary
 		} else {
-			memoriesCreated, _ = h.saveExtracted(ctx, compressed, sess.Project)
+			var extractErr error
+			memoriesCreated, extractErr = h.saveExtracted(ctx, compressed, sess.Project, sess.ID)
+			if extractErr != nil {
+				slog.Error("some extracted memories failed to save", "project", sess.Project, "saved", memoriesCreated, "error", extractErr)
+			}
 
 			// Auto-generate summary from extracted memories when none provided
 			if summary == "" {
@@ -461,6 +468,7 @@ func (h *Handlers) UpdateMemory(ctx context.Context, req mcp.CallToolRequest) (*
 	}
 
 	if err := h.store.Update(ctx, id, fields); err != nil {
+		slog.Error("update memory failed", "id", id, "error", err)
 		// Security: do not leak internal error details
 		return mcp.NewToolResultError("update failed"), nil
 	}
@@ -474,16 +482,10 @@ func (h *Handlers) UpdateMemory(ctx context.Context, req mcp.CallToolRequest) (*
 
 // PRIVATE
 
-func (h *Handlers) saveExtracted(ctx context.Context, cr *compressor.CompressResult, project string) (int, error) {
+func (h *Handlers) saveExtracted(ctx context.Context, cr *compressor.CompressResult, project, sessionID string) (int, error) {
 	count := 0
 	now := time.Now().Unix()
-
-	h.mu.Lock()
-	sessionID := ""
-	if h.activeSession != nil {
-		sessionID = h.activeSession.ID
-	}
-	h.mu.Unlock()
+	var lastErr error
 
 	save := func(items []compressor.ExtractedMemory, memType memory.MemoryType) {
 		for _, item := range items {
@@ -499,7 +501,10 @@ func (h *Handlers) saveExtracted(ctx context.Context, cr *compressor.CompressRes
 				LastAccessed: now,
 				AccessCount:  0,
 			}
-			if err := h.store.Save(ctx, mem); err == nil {
+			if err := h.store.Save(ctx, mem); err != nil {
+				slog.Error("save extracted memory failed", "type", memType, "project", project, "error", err)
+				lastErr = err
+			} else {
 				compressor.IncrementTags(ctx, h.rdb, item.Tags)
 				count++
 			}
@@ -510,7 +515,7 @@ func (h *Handlers) saveExtracted(ctx context.Context, cr *compressor.CompressRes
 	save(cr.Concepts, memory.Concept)
 	save(cr.Narratives, memory.Narrative)
 
-	return count, nil
+	return count, lastErr
 }
 
 // buildAutoSummary generates a session summary from extracted memories.

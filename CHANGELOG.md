@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased] - 2026-03-29 (Alessandro Bartoli)
 
+### Fixed
+
+- `saveExtracted` always produced empty `session_id` on auto-extracted memories because `activeSession` was cleared before the call; now receives `sessionID` as parameter
+- TOCTOU race in `StartSession`: two concurrent calls could both pass the nil-check and create duplicate sessions; `activeSession` is now set under the same lock, with rollback on save failure
+- `DeleteByFilter` potential infinite loop when RediSearch index is stale; added `maxIterations` cap and early exit when no keys are actually deleted in a batch
+- `saveExtracted` and `UpdateMemory` silently swallowed errors; now logged via `slog.Error` before returning generic user-facing messages
+- Missing `^` (caret) in `escapeQueryText` RediSearch special characters, allowing prefix-match query injection; removed unnecessary `'` (single quote) escape
+- `parseDimensionFromInfo` unreliable `fmt.Sprintf` string-parsing pass removed; now relies solely on typed structure walker (`parseDimensionNested`)
+- `hashToSession` fragile offset-based prefix stripping replaced with `strings.TrimPrefix`
+- `computeStats` legacy path divided `sumImportance` by `total_results` (which can exceed the 10k entry cap) instead of actual entry count, producing wrong `AvgImportance`
+- `reVersion` regex required 3-part versions (`major.minor.patch`); now matches 2-part versions like `v1.0` via optional patch group
+
 ### Changed
 
 - Project renamed from `agentmem` to `mnemoir` (mnemonic + memoir)

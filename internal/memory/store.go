@@ -7,6 +7,7 @@ import (
 	"math"
 	"regexp"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/alle-bartoli/mnemoir/internal/config"
@@ -104,7 +105,8 @@ func (s *Store) DeleteByFilter(ctx context.Context, project string, olderThan ti
 	query := buildFilterQuery(project, olderThan)
 	totalDeleted := 0
 
-	for {
+	const maxIterations = 100 // Safety: prevent infinite loop if index is stale
+	for iteration := 0; iteration < maxIterations; iteration++ {
 		args := []any{"FT.SEARCH", "idx:memories", query, "NOCONTENT", "LIMIT", 0, 1000}
 		res, err := s.rdb.Do(ctx, args...).Result()
 		if err != nil {
@@ -125,10 +127,17 @@ func (s *Store) DeleteByFilter(ctx context.Context, project string, olderThan ti
 			return totalDeleted, fmt.Errorf("bulk delete: %w", err)
 		}
 
+		deletedThisBatch := 0
 		for _, cmd := range cmds {
 			if cmd.(*goredis.IntCmd).Val() > 0 {
-				totalDeleted++
+				deletedThisBatch++
 			}
+		}
+		totalDeleted += deletedThisBatch
+
+		// Safety: if no keys were actually deleted, the index is stale - break to avoid spinning
+		if deletedThisBatch == 0 {
+			break
 		}
 	}
 
@@ -419,10 +428,7 @@ func hashToMemory(id string, vals map[string]string) (*Memory, error) {
 
 func hashToSession(key string, vals map[string]string) *Session {
 	// Extract ID from key "session:ULID"
-	id := key
-	if len(key) > 8 {
-		id = key[8:] // Remove "session:" prefix
-	}
+	id := strings.TrimPrefix(key, "session:")
 
 	startedAt, _ := strconv.ParseInt(vals["started_at"], 10, 64)
 	endedAt, _ := strconv.ParseInt(vals["ended_at"], 10, 64)
@@ -574,8 +580,9 @@ func computeStats(res any) (*MemoryStats, error) {
 		}
 	}
 
-	if total > 0 {
-		stats.AvgImportance = float64(sumImportance) / float64(total)
+	entryCount := len(entries)
+	if entryCount > 0 {
+		stats.AvgImportance = float64(sumImportance) / float64(entryCount)
 	}
 	stats.OldestMemoryAt = oldest
 	stats.NewestMemoryAt = newest
