@@ -15,6 +15,7 @@ import (
 	"github.com/alle-bartoli/mnemoir/internal/memory"
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/oklog/ulid/v2"
+	"github.com/redis/go-redis/v9"
 )
 
 // Security: input length limits prevent oversized payloads
@@ -53,6 +54,7 @@ type Handlers struct {
 	store      *memory.Store
 	compressor compressor.ICompressor
 	cfg        *config.Config
+	rdb        *redis.Client
 
 	mu            sync.Mutex // Security: protects activeSession from concurrent access
 	activeSession *memory.Session
@@ -125,6 +127,8 @@ func (h *Handlers) StoreMemory(ctx context.Context, req mcp.CallToolRequest) (*m
 	if err := h.store.Save(ctx, mem); err != nil {
 		return nil, fmt.Errorf("save memory: %w", err)
 	}
+
+	compressor.IncrementTags(ctx, h.rdb, tags)
 
 	result := map[string]any{
 		"id":         id,
@@ -496,6 +500,7 @@ func (h *Handlers) saveExtracted(ctx context.Context, cr *compressor.CompressRes
 				AccessCount:  0,
 			}
 			if err := h.store.Save(ctx, mem); err == nil {
+				compressor.IncrementTags(ctx, h.rdb, item.Tags)
 				count++
 			}
 		}

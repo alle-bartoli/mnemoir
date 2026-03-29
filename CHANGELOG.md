@@ -19,6 +19,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Entry point directory: `cmd/agentmem/` to `cmd/mnemoir/`
 - All documentation, README, and client registration examples updated
 
+### Added
+
+- Learned tag vocabulary: `LocalCompressor` reads tech keywords from Redis sorted set (`tags:frequency`) instead of a hardcoded list
+- `seedTags()`: populates `tags:frequency` with default keywords (score 0) on first run, idempotent via `ZADD NX`
+- `IncrementTags()`: increments tag frequency scores when memories are stored (both user-supplied and compressor-extracted)
+- `loadVocabulary()`: reads learned tags from Redis sorted by frequency, falls back to defaults if Redis is unavailable
+- `defaultTechKeywords` package-level variable replaces the inline hardcoded list, used as seed and fallback
+
 ## [Unreleased] - 2026-03-29 (Alessandro Bartoli)
 
 ### Added

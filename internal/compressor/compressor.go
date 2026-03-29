@@ -6,6 +6,7 @@ import (
 	"fmt"
 
 	"github.com/alle-bartoli/mnemoir/internal/config"
+	"github.com/redis/go-redis/v9"
 )
 
 // ExtractedMemory is a single memory extracted by the compressor.
@@ -28,14 +29,15 @@ type ICompressor interface {
 }
 
 // NewCompressor creates a compressor based on config provider.
-func NewCompressor(cfg config.CompressorConfig) (ICompressor, error) {
+// rdb is used by the local compressor for learned tag vocabulary.
+func NewCompressor(cfg config.CompressorConfig, rdb *redis.Client) (ICompressor, error) {
 	switch cfg.Provider {
 	case "claude":
 		return NewClaudeCompressor(cfg.Claude)
 	case "ollama":
 		return NewOllamaCompressor(cfg.Ollama)
 	case "local":
-		return NewLocalCompressor()
+		return NewLocalCompressor(rdb)
 	default:
 		return nil, fmt.Errorf("unknown compressor provider: %s", cfg.Provider)
 	}

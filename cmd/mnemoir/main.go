@@ -76,7 +76,7 @@ func main() {
 	defer emb.Close() // Release ONNX session and provider resources
 
 	// Initialize compressor
-	comp, err := compressor.NewCompressor(cfg.Compressor)
+	comp, err := compressor.NewCompressor(cfg.Compressor, rc.RDB())
 	if err != nil {
 		slog.Error("Failed to create compressor", "provider", cfg.Compressor.Provider, "error", err)
 		os.Exit(1)
@@ -93,7 +93,7 @@ func main() {
 	}
 
 	// Create and start MCP server
-	s := mcpserver.NewServer(store, comp, cfg)
+	s := mcpserver.NewServer(store, comp, cfg, rc.RDB())
 
 	// Graceful shutdown: cancel context and let ServeStdio return naturally.
 	// Avoids os.Exit which would bypass defers (embedder close, Redis close).

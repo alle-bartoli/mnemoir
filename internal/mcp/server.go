@@ -7,10 +7,11 @@ import (
 	"github.com/alle-bartoli/mnemoir/internal/memory"
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
+	"github.com/redis/go-redis/v9"
 )
 
 // NewServer creates an MCP server with all tools registered.
-func NewServer(store *memory.Store, comp compressor.ICompressor, cfg *config.Config) *server.MCPServer {
+func NewServer(store *memory.Store, comp compressor.ICompressor, cfg *config.Config, rdb *redis.Client) *server.MCPServer {
 	s := server.NewMCPServer(
 		"mnemoir",
 		"1.0.0",
@@ -21,6 +22,7 @@ func NewServer(store *memory.Store, comp compressor.ICompressor, cfg *config.Con
 		store:      store,
 		compressor: comp,
 		cfg:        cfg,
+		rdb:        rdb,
 	}
 
 	registerTools(s, h)

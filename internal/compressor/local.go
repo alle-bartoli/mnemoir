@@ -2,23 +2,56 @@ package compressor
 
 import (
 	"context"
+	"fmt"
+	"log/slog"
 	"regexp"
 	"strings"
 	"unicode"
+
+	"github.com/redis/go-redis/v9"
 )
 
-// LocalCompressor extracts structured memories using rule-based text analysis.
-// No external API or model required.
-type LocalCompressor struct{}
+const tagFrequencyKey = "tags:frequency"
 
-// NewLocalCompressor creates a rule-based compressor.
-func NewLocalCompressor() (*LocalCompressor, error) {
-	return &LocalCompressor{}, nil
+// LocalCompressor extracts structured memories using rule-based text analysis.
+// No external API or model required. Tag vocabulary is learned from usage via Redis.
+type LocalCompressor struct {
+	rdb *redis.Client
+}
+
+// NewLocalCompressor creates a rule-based compressor with learned tag vocabulary.
+func NewLocalCompressor(rdb *redis.Client) (*LocalCompressor, error) {
+	c := &LocalCompressor{rdb: rdb}
+	if err := c.seedTags(context.Background()); err != nil {
+		slog.Warn("failed to seed tag vocabulary", "error", err)
+	}
+	return c, nil
+}
+
+// IncrementTags increments the frequency score of each tag in the learned vocabulary.
+func IncrementTags(ctx context.Context, rdb *redis.Client, tags string) {
+	if rdb == nil || tags == "" {
+		return
+	}
+	pipe := rdb.Pipeline()
+	for _, tag := range strings.Split(tags, ",") {
+		tag = strings.TrimSpace(strings.ToLower(tag))
+		if tag == "" {
+			continue
+		}
+		pipe.ZIncrBy(ctx, tagFrequencyKey, 1, tag)
+	}
+	if _, err := pipe.Exec(ctx); err != nil {
+		slog.Warn("failed to increment tag frequency", "error", err)
+	}
 }
 
 // Compress classifies sentences from observations into facts, concepts, and narratives.
-func (c *LocalCompressor) Compress(_ context.Context, observations string) (*CompressResult, error) {
+func (c *LocalCompressor) Compress(ctx context.Context, observations string) (*CompressResult, error) {
 	sentences := splitSentences(observations)
+
+	// Load learned vocabulary once per call
+	vocab := c.loadVocabulary(ctx)
 
 	result := &CompressResult{
 		Facts:      []ExtractedMemory{},
@@ -32,7 +65,7 @@ func (c *LocalCompressor) Compress(_ context.Context, observations string) (*Com
 			continue
 		}
 
-		tags := extractTags(s)
+		tags := extractTags(s, vocab)
 		tagStr := strings.Join(tags, ",")
 
 		switch classifySentence(s) {
@@ -73,13 +106,62 @@ var (
 	reConfigKV   = regexp.MustCompile(`[\w.-]+\s*=\s*["']?[\w./:@-]+`)
 	reWindowPath = regexp.MustCompile(`[A-Z]:\\[\w\\.-]+`)
 
-	// Concept keywords
+	// Concept keywords (classification signals, not tech tags)
 	conceptKeywords = []string{
 		"pattern", "architecture", "design", "approach", "strategy",
 		"principle", "convention", "paradigm", "framework", "methodology",
 		"tradeoff", "trade-off", "abstraction", "interface", "protocol",
 	}
+
+	// defaultTechKeywords seeds the learned vocabulary on first run
+	defaultTechKeywords = []string{
+		"redis", "docker", "go", "golang", "python", "node", "react",
+		"postgres", "mysql", "mongodb", "api", "rest", "grpc", "graphql",
+		"kubernetes", "k8s", "aws", "gcp", "azure", "linux", "nginx",
+		"git", "ci", "cd", "test", "deploy", "config", "auth", "cache",
+		"queue", "worker", "cron", "webhook", "websocket", "http", "tcp",
+		"ssl", "tls", "dns", "cors", "jwt", "oauth", "oidc",
+	}
 )
+
+// seedTags populates the tag vocabulary with defaults if the sorted set is empty.
+func (c *LocalCompressor) seedTags(ctx context.Context) error {
+	if c.rdb == nil {
+		return nil
+	}
+	count, err := c.rdb.ZCard(ctx, tagFrequencyKey).Result()
+	if err != nil {
+		return fmt.Errorf("zcard %s: %w", tagFrequencyKey, err)
+	}
+	if count > 0 {
+		return nil
+	}
+	members := make([]redis.Z, len(defaultTechKeywords))
+	for i, kw := range defaultTechKeywords {
+		members[i] = redis.Z{Score: 0, Member: kw}
+	}
+	if err := c.rdb.ZAddNX(ctx, tagFrequencyKey, members...).Err(); err != nil {
+		return fmt.Errorf("seed tags: %w", err)
+	}
+	slog.Info("seeded tag vocabulary", "count", len(defaultTechKeywords))
+	return nil
+}
+
+// loadVocabulary reads the learned tag vocabulary from Redis.
+// Falls back to defaultTechKeywords if Redis is unavailable.
+func (c *LocalCompressor) loadVocabulary(ctx context.Context) []string {
+	if c.rdb == nil {
+		return defaultTechKeywords
+	}
+	tags, err := c.rdb.ZRevRange(ctx, tagFrequencyKey, 0, -1).Result()
+	if err != nil || len(tags) == 0 {
+		if err != nil {
+			slog.Warn("failed to load tag vocabulary, using defaults", "error", err)
+		}
+		return defaultTechKeywords
+	}
+	return tags
+}
 
 func splitSentences(text string) []string {
 	// Split on sentence terminators, bullet points, and newlines
@@ -249,23 +331,14 @@ func scoreNarrative(_ string) int {
 	return 4
 }
 
-func extractTags(s string) []string {
+func extractTags(s string, vocab []string) []string {
 	seen := make(map[string]bool)
 	var tags []string
 
 	lower := strings.ToLower(s)
 
-	// Extract technology/tool keywords
-	techKeywords := []string{
-		"redis", "docker", "go", "golang", "python", "node", "react",
-		"postgres", "mysql", "mongodb", "api", "rest", "grpc", "graphql",
-		"kubernetes", "k8s", "aws", "gcp", "azure", "linux", "nginx",
-		"git", "ci", "cd", "test", "deploy", "config", "auth", "cache",
-		"queue", "worker", "cron", "webhook", "websocket", "http", "tcp",
-		"ssl", "tls", "dns", "cors", "jwt", "oauth", "oidc",
-	}
-
-	for _, kw := range techKeywords {
+	// Extract technology/tool keywords from learned vocabulary
+	for _, kw := range vocab {
 		if strings.Contains(lower, kw) && !seen[kw] {
 			seen[kw] = true
 			tags = append(tags, kw)
