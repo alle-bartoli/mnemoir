@@ -27,6 +27,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `loadVocabulary()`: reads learned tags from Redis sorted by frequency, falls back to defaults if Redis is unavailable
 - `defaultTechKeywords` package-level variable replaces the inline hardcoded list, used as seed and fallback
 
+### Fixed
+
+- Makefile now loads `.env` file automatically via `-include .env` + `export`, so `MNEMOIR_REDIS_PASSWORD` check no longer falsely warns when the variable is set in `.env`
+
 ## [Unreleased] - 2026-03-29 (Alessandro Bartoli)
 
 ### Added

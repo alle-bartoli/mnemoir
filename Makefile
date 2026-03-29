@@ -1,5 +1,9 @@
 .PHONY: help build install uninstall test docker-up docker-down redis-ui setup mcp-register clean clean-data
 
+# Load .env if present so env-var checks work without manual export
+-include .env
+export
+
 BINARY := mnemoir
 BIN_DIR := bin
 CMD_DIR := ./cmd/mnemoir
