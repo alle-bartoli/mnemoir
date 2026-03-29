@@ -9,7 +9,7 @@ data/
 *.dylib
 
 # Documentation (staged when ready)
-docs/
+docs/internal/
 
 # Go test/build cache
 *.test

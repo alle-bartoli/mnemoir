@@ -31,6 +31,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - MCP client registration instructions in README for Claude Code, Cursor, Windsurf, Continue.dev, Cline, and Zed
 - RedisInsight Workbench query examples in README (search, filter, aggregate)
 - TODO section in README with roadmap items (multi-session, CI tests, cross-project recall, export/import, auto-forget)
+- `docs/agent-instructions.md`: ready-to-copy prompt block for `CLAUDE.md` or equivalent system prompts, covering session lifecycle, when to store/recall/forget/update, importance guidelines, and example flow
 
 ### Changed
 

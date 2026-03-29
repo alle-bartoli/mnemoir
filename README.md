@@ -330,6 +330,10 @@ FT.AGGREGATE idx:memories "*" GROUPBY 1 @project REDUCE COUNT 0 AS count
 4. Set breakpoint: `<leader>db`
 5. Start debugger: `<leader>dc` then select "Debug Package"
 
+## Agent Instructions
+
+See [docs/agent-instructions.md](docs/agent-instructions.md) for a ready-to-copy prompt block to paste into your project's `CLAUDE.md` (or equivalent system prompt for other agents).
+
 ## TODO
 
 - [ ] **Multi-session support**: allow concurrent sessions across different projects (currently one active session per process, `start_session` rejects if one is already active)
