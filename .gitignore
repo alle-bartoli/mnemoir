@@ -1,5 +1,8 @@
 # Build artifacts
 bin/
+
+# Redis persistence (local bind mount)
+data/
 *.exe
 *.dll
 *.so

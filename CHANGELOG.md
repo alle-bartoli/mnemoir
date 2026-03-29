@@ -45,6 +45,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Error response in `UpdateMemory` sanitized to not leak internal details
 - Replaced all `log.Printf`/`log.Fatalf` with structured `slog` calls across all packages
 - Test cleanup helpers now remove `session:test-*` keys and `project_sessions:{project}` sorted sets
+- Redis persistence switched from Docker named volume to local bind mount (`./data:/data`) for portability
+- `data/` added to `.gitignore`
 
 ### Security
 
