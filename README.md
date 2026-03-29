@@ -1,27 +1,13 @@
 # Agentmem
 
-Personal memory layer for AI coding agents. Runs offline, keeps data local.
-
-## Why I built this
-
-Claude Code's built-in memory (CLAUDE.md + auto-memory) is file-based and flat. No semantic search, no decay, no scoring. I wanted something that works more like actual memory: things you use often stay sharp, things you forget fade away.
-
-The key ideas behind agentmem:
-
-- **Offline by default.** The entire stack runs without API keys. Local ONNX embeddings and rule-based compression keep everything on my machine. Cloud providers (OpenAI, Claude API, Ollama) are supported but optional.
-- **Spaced repetition.** Importance scores decay over time (`importance * 0.9^weeks`). Each recall boosts the score back up. This means the agent's context naturally prioritizes what matters.
-- **Typed memories.** Not everything is a flat string. Facts (concrete data), concepts (patterns/decisions), and narratives (what happened and why) are stored and searched differently.
-
-## Summary
-
-`agentmem` is an MCP server that gives AI coding agents long-term memory. It runs as a child process via stdio transport, backed by Redis Stack.
-
-The stack: Go binary over stdio (JSON-RPC), Redis Stack (Hashes + RediSearch), embeddings via OpenAI/Ollama/local ONNX, memory extraction via Claude API/Ollama/local rules.
+MCP server that gives AI coding agents long-term memory.
+Runs as a child process via stdio transport, backed by Redis Stack.
+Fully offline-capable, no API keys required.
 
 ## Features
 
-- **Offline-first**: local ONNX embeddings + rule-based compression, no API keys required
-- **Spaced repetition**: lazy temporal decay + recall boost on importance, integrated into hybrid search scoring
+- **Offline-first**: local ONNX embeddings (`all-MiniLM-L6-v2`, 384d) + rule-based compression, no API keys required
+- **Spaced repetition**: lazy temporal decay + recall boost on importance scores, computed at query time
 - **Typed memories**: `fact`, `concept`, `narrative` with automatic classification
 - **Hybrid search**: vector (KNN/HNSW) + full-text (TF-IDF) via RediSearch
 - **MCP-native**: 8 tools via Model Context Protocol over stdio
@@ -32,26 +18,16 @@ The stack: Go binary over stdio (JSON-RPC), Redis Stack (Hashes + RediSearch), e
 
 ## Prerequisites
 
-- Go 1.25 or higher
+- Go 1.25+
 - Docker and Docker Compose
 - Redis Stack 7.2+ (provided via `docker-compose.yml`)
-- Environment variables:
-  - `AGENTMEM_REDIS_PASSWORD` (Redis auth, default: `changeme`)
-  - `ANTHROPIC_API_KEY` (optional, for Claude compressor)
-  - `OPENAI_API_KEY` (optional, for OpenAI embeddings)
-- An MCP-compatible client (e.g. Claude Code, Cursor, Windsurf)
+- An MCP-compatible client (Claude Code, Cursor, Windsurf)
 
 ## Quick Start
 
 ```bash
-# Show all available commands
-make help
-
 # Start Redis Stack and build binary
 make setup
-
-# Open RedisInsight web UI (optional)
-make redis-ui
 
 # Register MCP server with your client
 make mcp-register
@@ -74,19 +50,19 @@ Edit `~/.agentmem/config.toml` to customize providers and behavior.
 
 Default configuration copied to `~/.agentmem/config.toml` on first setup.
 
-Key settings:
-
-- `compressor.provider`: `claude`, `ollama`, or `local`
-- `embedding.provider`: `openai`, `ollama`, or `local`
-- `memory.auto_decay`: Enable temporal decay (default: `true`)
-- `memory.decay_factor`: Multiplier per interval, e.g. `0.9` = 10% loss (default: `0.9`)
-- `memory.decay_interval`: Time between decay steps (default: `168h` = 1 week)
-- `memory.vector_weight`: Semantic search weight in hybrid scoring (default: `0.60`)
-- `memory.fts_weight`: Keyword search weight in hybrid scoring (default: `0.25`)
-- `memory.importance_weight`: Memory importance weight in hybrid scoring (default: `0.15`)
-- `memory.access_boost_factor`: Points gained per recall (default: `0.3`)
-- `memory.access_boost_cap`: Max boost from recalls (default: `2.0`)
-- `session.max_recall_items`: Limit recalled memories (default: `20`)
+| Key                          | Default | Description                                   |
+| ---------------------------- | ------- | --------------------------------------------- |
+| `compressor.provider`        | `local` | `claude`, `ollama`, or `local`                |
+| `embedding.provider`         | `local` | `openai`, `ollama`, or `local`                |
+| `memory.auto_decay`          | `true`  | Enable temporal decay                         |
+| `memory.decay_factor`        | `0.9`   | Multiplier per interval (0.9 = 10% loss/week) |
+| `memory.decay_interval`      | `168h`  | Time between decay steps (1 week)             |
+| `memory.vector_weight`       | `0.60`  | Semantic search weight in hybrid scoring      |
+| `memory.fts_weight`          | `0.25`  | Keyword search weight in hybrid scoring       |
+| `memory.importance_weight`   | `0.15`  | Importance weight in hybrid scoring           |
+| `memory.access_boost_factor` | `0.3`   | Points gained per recall                      |
+| `memory.access_boost_cap`    | `2.0`   | Max boost from recalls                        |
+| `session.max_recall_items`   | `20`    | Limit recalled memories per session           |
 
 ## MCP Tools
 
@@ -103,21 +79,16 @@ Key settings:
 
 ## Spaced Repetition
 
-Memories decay over time and get boosted on recall, just like human memory.
-This is computed lazily at query time (no background goroutine, no overhead).
+Importance scores decay over time and boost on recall. Computed lazily at query time with no background goroutines.
 
-### How it works
-
-Every memory has a base `importance` (1-10).
-When you `recall` memories, the search engine computes an **effective importance** that factors in:
-
-1. **Temporal decay**: importance drops by `decay_factor` (default 10%) per `decay_interval` (default 1 week)
-2. **Access boost**: each recall adds `access_boost_factor` points (default 0.3), capped at `access_boost_cap` (default 2.0)
-3. **Clamping**: result is always between 1 and 10
+### Formula
 
 ```
 effective = base * decay_factor^intervals + min(boost_cap, access_count * boost_factor)
 ```
+
+- `intervals`: number of `decay_interval` periods since last decay application
+- Result is clamped to `[1, 10]`
 
 ### Decay examples
 
@@ -130,9 +101,7 @@ effective = base * decay_factor^intervals + min(boost_cap, access_count * boost_
 | Old but heavily used | 5          | 8          | 10      | 4.1       |
 | Minimum floor        | 3          | 20         | 0       | 1.0       |
 
-### How it affects search
-
-Hybrid search (`recall` with `search_mode: hybrid`) combines three signals:
+### Hybrid search weights
 
 | Signal              | Default weight | What it captures                            |
 | ------------------- | -------------- | ------------------------------------------- |
@@ -140,20 +109,17 @@ Hybrid search (`recall` with `search_mode: hybrid`) combines three signals:
 | Full-text (keyword) | 0.25           | Exact/stemmed keyword matches               |
 | Importance (decay)  | 0.15           | How important and recently used a memory is |
 
-Each signal is normalized to [0, 1] before weighting.
-A memory with high effective importance gets a scoring nudge that can push it above a semantically similar but forgotten memory.
+Each signal is normalized to `[0, 1]` before weighting.
 
-### When recall boosts happen
+### Recall boost behavior
 
-Every time a memory appears in search results (`recall`, `start_session` top memories), its `access_count` increments and `importance` is recalculated and persisted. This means:
+Every time a memory appears in search results (`recall`, `start_session` top memories), its `access_count` increments and `importance` is recalculated and persisted.
 
-- Memories you keep finding stay relevant
-- Memories you never search for gradually fade
-- The agent's context window naturally fills with what matters most
+- Memories retrieved frequently stay relevant
+- Memories never searched gradually fade
+- Context window naturally fills with what matters most
 
 ### Tuning
-
-All parameters are configurable in `~/.agentmem/config.toml` under `[memory]`:
 
 ```toml
 [memory]
@@ -173,11 +139,11 @@ Set `importance_weight = 0` to disable importance scoring. Set `auto_decay = fal
 
 ```
 Client <--stdio/JSON-RPC--> agentmem <--TCP--> Redis Stack
-                                      |
-                                      +--> OpenAI API (embeddings)
-                                      +--> Anthropic API (compression)
-                                      +--> Ollama (local alternative)
-                                      +--> Local ONNX / rules (zero API keys)
+                                     |
+                                     +--> OpenAI API (embeddings)
+                                     +--> Anthropic API (compression)
+                                     +--> Ollama (local alternative)
+                                     +--> Local ONNX / rules (zero API keys)
 ```
 
 | Layer      | Technology                  | Role                                                                                      |
@@ -189,12 +155,12 @@ Client <--stdio/JSON-RPC--> agentmem <--TCP--> Redis Stack
 | IDs        | ULID                        | Chronologically sortable unique identifiers                                               |
 | Config     | TOML                        | `~/.agentmem/config.toml`                                                                 |
 
-Directory structure:
+### Directory structure
 
 ```
 agentmem/
 ├── cmd/agentmem/        # Entry point, CLI flags
-├���─ internal/
+├── internal/
 │   ├── compressor/      # Memory extraction (Claude API, Ollama, local rules)
 │   ├── config/          # TOML configuration loading
 │   ├── embedding/       # Vector generation (OpenAI, Ollama, local ONNX)
@@ -211,40 +177,19 @@ agentmem/
 ## Development
 
 ```bash
-# Show all available commands
-make help
-
-# Build binary
-make build
-
-# Run tests
-make test
-
-# Start Redis Stack
-make docker-up
-
-# Open RedisInsight web UI (http://localhost:8001)
-make redis-ui
-
-# Stop Redis Stack
-make docker-down
-
-# Clean build artifacts
-make clean
-
-# Install to $GOPATH/bin
-make install
+make help         # Show all available commands
+make build        # Build binary
+make test         # Run tests
+make docker-up    # Start Redis Stack
+make docker-down  # Stop Redis Stack
+make redis-ui     # Open RedisInsight web UI (http://localhost:8001)
+make clean        # Clean build artifacts
+make install      # Install to $GOPATH/bin
 ```
 
-### RedisInsight Web UI
+### RedisInsight
 
-Redis Stack includes **RedisInsight** on port `8001`. Open it with:
-
-```bash
-make redis-ui
-```
-
-Use it to:
+Redis Stack includes RedisInsight on port `8001` (`make redis-ui`).
 
 - Browse memories (`mem:{ulid}` hashes)
 - Inspect search index (`idx:memories`)
@@ -253,13 +198,11 @@ Use it to:
 
 ### Debugging with LazyVim/nvim-dap
 
-For Go debugging with Delve:
-
 1. Install Delve: `go install github.com/go-delve/delve/cmd/dlv@latest`
 2. Ensure Redis is running: `make docker-up`
 3. Open a Go file: `nvim cmd/agentmem/main.go`
 4. Set breakpoint: `<leader>db`
-5. Start debugger: `<leader>dc` → select "Debug Package"
+5. Start debugger: `<leader>dc` then select "Debug Package"
 
 ## License
 
