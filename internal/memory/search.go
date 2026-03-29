@@ -3,6 +3,7 @@ package memory
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"math"
 	"slices"
 	"sort"
@@ -25,6 +26,17 @@ import (
 //	  LIMIT 0 10
 //	  DIALECT 2                     -- required for vector query syntax
 func (s *Store) VectorSearch(ctx context.Context, query string, filters SearchFilters, limit int) ([]SearchResult, error) {
+	results, err := s.vectorSearchRaw(ctx, query, filters, limit)
+	if err != nil {
+		return nil, err
+	}
+	s.trackAccess(ctx, results)
+	return results, nil
+}
+
+// vectorSearchRaw performs KNN search without access tracking side effects.
+// Used by HybridSearch to avoid double-counting access on merged results.
+func (s *Store) vectorSearchRaw(ctx context.Context, query string, filters SearchFilters, limit int) ([]SearchResult, error) {
 	emb, err := s.embedder.Embed(ctx, query)
 	if err != nil {
 		return nil, fmt.Errorf("embed query: %w", err)
@@ -47,17 +59,7 @@ func (s *Store) VectorSearch(ctx context.Context, query string, filters SearchFi
 		return nil, fmt.Errorf("vector search: %w", err)
 	}
 
-	results, err := extractSearchResults(res)
-	if err != nil {
-		return nil, err
-	}
-
-	// Update access tracking for returned results
-	for _, r := range results {
-		_ = s.UpdateAccess(ctx, r.Memory.ID)
-	}
-
-	return results, nil
+	return extractSearchResults(res)
 }
 
 // FullTextSearch performs text-based search using RediSearch FTS (Full-Text Search).
@@ -66,6 +68,17 @@ func (s *Store) VectorSearch(ctx context.Context, query string, filters SearchFi
 // WITHSCORES includes the relevance score in the response (higher = more relevant).
 // Unlike VectorSearch, this finds exact/stemmed keyword matches, not semantic similarity.
 func (s *Store) FullTextSearch(ctx context.Context, query string, filters SearchFilters, limit int) ([]SearchResult, error) {
+	results, err := s.fullTextSearchRaw(ctx, query, filters, limit)
+	if err != nil {
+		return nil, err
+	}
+	s.trackAccess(ctx, results)
+	return results, nil
+}
+
+// fullTextSearchRaw performs FTS without access tracking side effects.
+// Used by HybridSearch to avoid double-counting access on merged results.
+func (s *Store) fullTextSearchRaw(ctx context.Context, query string, filters SearchFilters, limit int) ([]SearchResult, error) {
 	ftsQuery := buildFTSQuery(query, filters)
 
 	res, err := s.rdb.Do(ctx,
@@ -77,43 +90,34 @@ func (s *Store) FullTextSearch(ctx context.Context, query string, filters Search
 		return nil, fmt.Errorf("fulltext search: %w", err)
 	}
 
-	results, err := extractFTSResults(res)
-	if err != nil {
-		return nil, err
-	}
-
-	for _, r := range results {
-		_ = s.UpdateAccess(ctx, r.Memory.ID)
-	}
-
-	return results, nil
+	return extractFTSResults(res)
 }
 
 // HybridSearch combines vector and fulltext search with weighted scoring.
-// Runs both searches with 2x the limit for better merge quality, then mergeResults
-// normalizes and combines scores (0.7 vector + 0.3 FTS).
-// If one search fails, falls back to the other. Only fails if both fail.
+// Runs both raw searches (no access tracking) with 2x the limit for better merge quality,
+// merges and deduplicates by memory ID, then tracks access once per unique result.
 //
-// Why 0.7/0.3: vector search captures semantic meaning (e.g. "database config" finds
-// "Redis runs on port 6379"), while FTS catches exact keyword matches (e.g. searching
-// for a specific filename or port number). Semantic is more useful in general, but
-// FTS saves you when looking for a specific term. Weights are tunable via config.
+// Default weights: 0.60 vector + 0.25 FTS + 0.15 importance (tunable via config).
 func (s *Store) HybridSearch(ctx context.Context, query string, filters SearchFilters, limit int) ([]SearchResult, error) {
-	// Run both searches with a larger limit for better merge quality
 	fetchLimit := limit * 2
 
-	vectorResults, vecErr := s.VectorSearch(ctx, query, filters, fetchLimit)
-	ftsResults, ftsErr := s.FullTextSearch(ctx, query, filters, fetchLimit)
+	// Use raw methods to avoid double access-count increment on overlapping results
+	vectorResults, vecErr := s.vectorSearchRaw(ctx, query, filters, fetchLimit)
+	ftsResults, ftsErr := s.fullTextSearchRaw(ctx, query, filters, fetchLimit)
 
 	// Return whichever succeeds if one fails
 	if vecErr != nil && ftsErr != nil {
 		return nil, fmt.Errorf("both searches failed: vector=%w, fts=%v", vecErr, ftsErr)
 	}
 	if vecErr != nil {
-		return truncate(ftsResults, limit), nil
+		results := truncate(ftsResults, limit)
+		s.trackAccess(ctx, results)
+		return results, nil
 	}
 	if ftsErr != nil {
-		return truncate(vectorResults, limit), nil
+		results := truncate(vectorResults, limit)
+		s.trackAccess(ctx, results)
+		return results, nil
 	}
 
 	decayInterval, _ := s.memCfg.ParsedDecayInterval()
@@ -122,10 +126,22 @@ func (s *Store) HybridSearch(ctx context.Context, query string, filters SearchFi
 		s.memCfg.DecayFactor, decayInterval,
 		s.memCfg.AccessBoostFactor, s.memCfg.AccessBoostCap,
 	)
-	return truncate(merged, limit), nil
+	results := truncate(merged, limit)
+	s.trackAccess(ctx, results)
+	return results, nil
 }
 
 // PRIVATE
+
+// trackAccess increments access_count for each unique result.
+// Errors are logged but do not fail the search - stale access counts are acceptable.
+func (s *Store) trackAccess(ctx context.Context, results []SearchResult) {
+	for _, r := range results {
+		if err := s.UpdateAccess(ctx, r.Memory.ID); err != nil {
+			slog.Warn("trackAccess failed", "memory_id", r.Memory.ID, "error", err)
+		}
+	}
+}
 
 // @dev buildSearchFilter constructs a RediSearch filter expression for TAG fields.
 // TAG filters use the syntax @field:{value} for exact match.

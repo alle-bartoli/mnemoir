@@ -241,6 +241,36 @@ func TestHybridSearch(t *testing.T) {
 	})
 }
 
+func TestHybridSearchSingleAccessCount(t *testing.T) {
+	store, _ := newSearchTestStore(t)
+	ctx := context.Background()
+
+	// Get initial access count
+	before, err := store.Get(ctx, "test-s-001")
+	if err != nil {
+		t.Fatalf("Get before: %v", err)
+	}
+	initialCount := before.AccessCount
+
+	// HybridSearch should only increment access_count once per result,
+	// even if the memory appears in both vector and FTS result sets.
+	filters := memory.SearchFilters{Project: searchTestProject}
+	_, err = store.HybridSearch(ctx, "Redis port 6379", filters, 5)
+	if err != nil {
+		t.Fatalf("HybridSearch: %v", err)
+	}
+
+	after, err := store.Get(ctx, "test-s-001")
+	if err != nil {
+		t.Fatalf("Get after: %v", err)
+	}
+
+	// Should be exactly +1, not +2 (the old bug was double-counting)
+	if after.AccessCount != initialCount+1 {
+		t.Errorf("AccessCount = %d, want %d (single increment)", after.AccessCount, initialCount+1)
+	}
+}
+
 func TestSpacedRepetition(t *testing.T) {
 	t.Run("UpdateAccessPersistsImportance", func(t *testing.T) {
 		store, _ := newSearchTestStore(t)

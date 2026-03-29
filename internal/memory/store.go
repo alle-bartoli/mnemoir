@@ -135,37 +135,57 @@ func (s *Store) DeleteByFilter(ctx context.Context, project string, olderThan ti
 	return totalDeleted, nil
 }
 
-// UpdateAccess increments access_count, updates last_accessed, and recalculates
-// importance using spaced repetition decay + access boost.
+// updateAccessScript atomically reads, computes, and writes access state in a single
+// Redis round-trip. Eliminates the read-modify-write race in the previous pipeline approach.
+//
+// KEYS[1] = mem:{id}
+// ARGV[1] = decay_factor, ARGV[2] = decay_interval_seconds, ARGV[3] = boost_factor,
+// ARGV[4] = boost_cap, ARGV[5] = now_unix
+var updateAccessScript = goredis.NewScript(`
+local key = KEYS[1]
+local decay_factor = tonumber(ARGV[1])
+local decay_interval = tonumber(ARGV[2])
+local boost_factor = tonumber(ARGV[3])
+local boost_cap = tonumber(ARGV[4])
+local now = tonumber(ARGV[5])
+
+local importance = tonumber(redis.call('HGET', key, 'importance') or '5')
+local access_count = tonumber(redis.call('HGET', key, 'access_count') or '0')
+local last_accessed = tonumber(redis.call('HGET', key, 'last_accessed') or tostring(now))
+
+access_count = access_count + 1
+
+-- Spaced repetition: effective = base * decay^intervals + min(cap, count * factor)
+local intervals = 0
+if decay_interval > 0 then
+    intervals = (now - last_accessed) / decay_interval
+end
+local decayed = importance * math.pow(decay_factor, intervals)
+local boost = math.min(boost_cap, access_count * boost_factor)
+local effective = decayed + boost
+-- Clamp to [1, 10]
+if effective < 1 then effective = 1 end
+if effective > 10 then effective = 10 end
+local new_importance = math.floor(effective + 0.5)
+
+redis.call('HSET', key, 'access_count', access_count, 'last_accessed', now, 'importance', new_importance)
+return new_importance
+`)
+
+// UpdateAccess atomically increments access_count, updates last_accessed, and
+// recalculates importance using spaced repetition. Uses a Lua script to prevent
+// read-modify-write races between concurrent search requests.
 func (s *Store) UpdateAccess(ctx context.Context, id string) error {
 	key := "mem:" + id
-
-	vals, err := s.rdb.HMGet(ctx, key, "importance", "access_count", "last_accessed").Result()
-	if err != nil {
-		return fmt.Errorf("read access state %s: %w", id, err)
-	}
-
-	importance, _ := strconv.Atoi(fmt.Sprint(vals[0]))
-	accessCount, _ := strconv.Atoi(fmt.Sprint(vals[1]))
-	lastAccessed, _ := strconv.ParseInt(fmt.Sprint(vals[2]), 10, 64)
-
-	// Build temporary memory to compute effective importance after this recall
-	mem := &Memory{
-		Importance:   importance,
-		AccessCount:  accessCount + 1,
-		LastAccessed: lastAccessed,
-	}
 	decayInterval, _ := s.memCfg.ParsedDecayInterval()
-	newImportance := int(mem.EffectiveImportance(
-		s.memCfg.DecayFactor, decayInterval,
-		s.memCfg.AccessBoostFactor, s.memCfg.AccessBoostCap,
-	))
 
-	pipe := s.rdb.Pipeline()
-	pipe.HIncrBy(ctx, key, "access_count", 1)
-	pipe.HSet(ctx, key, "last_accessed", time.Now().Unix())
-	pipe.HSet(ctx, key, "importance", newImportance)
-	_, err = pipe.Exec(ctx)
+	_, err := updateAccessScript.Run(ctx, s.rdb, []string{key},
+		s.memCfg.DecayFactor,
+		decayInterval.Seconds(),
+		s.memCfg.AccessBoostFactor,
+		s.memCfg.AccessBoostCap,
+		time.Now().Unix(),
+	).Result()
 	if err != nil {
 		return fmt.Errorf("update access %s: %w", id, err)
 	}
@@ -214,12 +234,32 @@ func (s *Store) CountByProject(ctx context.Context, project string) (int, error)
 }
 
 // GetStats returns aggregate statistics, optionally filtered by project.
+// Uses FT.AGGREGATE for server-side computation (no 10k result cap).
 func (s *Store) GetStats(ctx context.Context, project string) (*MemoryStats, error) {
 	query := "*"
 	if project != "" {
 		query = fmt.Sprintf("@project:{%s}", escapeTag(project))
 	}
 
+	// Use FT.AGGREGATE for server-side stats: total, avg importance, min/max created_at per type
+	res, err := s.rdb.Do(ctx,
+		"FT.AGGREGATE", "idx:memories", query,
+		"GROUPBY", "1", "@type",
+		"REDUCE", "COUNT", "0", "AS", "count",
+		"REDUCE", "AVG", "1", "@importance", "AS", "avg_imp",
+		"REDUCE", "MIN", "1", "@created_at", "AS", "oldest",
+		"REDUCE", "MAX", "1", "@created_at", "AS", "newest",
+	).Result()
+	if err != nil {
+		// Fallback to basic search count if FT.AGGREGATE is not available
+		return s.getStatsLegacy(ctx, query)
+	}
+
+	return parseAggregateStats(res)
+}
+
+// getStatsLegacy is a fallback using FT.SEARCH with a capped result set.
+func (s *Store) getStatsLegacy(ctx context.Context, query string) (*MemoryStats, error) {
 	res, err := s.rdb.Do(ctx,
 		"FT.SEARCH", "idx:memories", query,
 		"RETURN", "3", "type", "importance", "created_at",
@@ -228,11 +268,51 @@ func (s *Store) GetStats(ctx context.Context, project string) (*MemoryStats, err
 	if err != nil {
 		return nil, fmt.Errorf("stats query: %w", err)
 	}
-
 	return computeStats(res)
 }
 
-// SaveSession persists a session hash to Redis.
+// parseAggregateStats extracts stats from FT.AGGREGATE GROUPBY response.
+func parseAggregateStats(res any) (*MemoryStats, error) {
+	stats := &MemoryStats{
+		ByType: map[string]int{"fact": 0, "concept": 0, "narrative": 0},
+	}
+
+	entries := getResultEntries(res)
+	var totalImportanceSum float64
+	var totalCount int
+
+	for _, entry := range entries {
+		attrs := getExtraAttributes(entry)
+		typeName := attrs["type"]
+		count, _ := strconv.Atoi(attrs["count"])
+		avgImp, _ := strconv.ParseFloat(attrs["avg_imp"], 64)
+		oldest, _ := strconv.ParseInt(attrs["oldest"], 10, 64)
+		newest, _ := strconv.ParseInt(attrs["newest"], 10, 64)
+
+		if typeName != "" {
+			stats.ByType[typeName] = count
+		}
+		totalCount += count
+		totalImportanceSum += avgImp * float64(count)
+
+		if oldest > 0 && (stats.OldestMemoryAt == 0 || oldest < stats.OldestMemoryAt) {
+			stats.OldestMemoryAt = oldest
+		}
+		if newest > stats.NewestMemoryAt {
+			stats.NewestMemoryAt = newest
+		}
+	}
+
+	stats.Total = totalCount
+	if totalCount > 0 {
+		stats.AvgImportance = totalImportanceSum / float64(totalCount)
+	}
+
+	return stats, nil
+}
+
+// SaveSession persists a session hash to Redis and indexes it in a sorted set
+// keyed by project for O(log N) latest-session lookups.
 func (s *Store) SaveSession(ctx context.Context, sess *Session) error {
 	key := "session:" + sess.ID
 	fields := map[string]any{
@@ -242,57 +322,42 @@ func (s *Store) SaveSession(ctx context.Context, sess *Session) error {
 		"summary":      sess.Summary,
 		"memory_count": sess.MemoryCount,
 	}
-	if err := s.rdb.HSet(ctx, key, fields).Err(); err != nil {
+
+	pipe := s.rdb.Pipeline()
+	pipe.HSet(ctx, key, fields)
+	// Index session by project with started_at as score for fast latest-session lookup
+	pipe.ZAdd(ctx, "project_sessions:"+sess.Project, goredis.Z{
+		Score:  float64(sess.StartedAt),
+		Member: sess.ID,
+	})
+	if _, err := pipe.Exec(ctx); err != nil {
 		return fmt.Errorf("save session %s: %w", sess.ID, err)
 	}
 	return nil
 }
 
-// GetLastSession retrieves the most recent session for a project.
+// GetLastSession retrieves the most recent session for a project using the
+// sorted set index (O(log N) instead of the previous O(N) SCAN approach).
 func (s *Store) GetLastSession(ctx context.Context, project string) (*Session, error) {
-	// Scan session keys and find the latest for this project
-	var cursor uint64
-	var latestKey string
-	var latestStarted int64
-
-	for {
-		keys, next, err := s.rdb.Scan(ctx, cursor, "session:*", 100).Result()
-		if err != nil {
-			return nil, fmt.Errorf("scan sessions: %w", err)
-		}
-
-		for _, key := range keys {
-			proj, err := s.rdb.HGet(ctx, key, "project").Result()
-			if err != nil || proj != project {
-				continue
-			}
-			startedStr, err := s.rdb.HGet(ctx, key, "started_at").Result()
-			if err != nil {
-				continue
-			}
-			started, _ := strconv.ParseInt(startedStr, 10, 64)
-			if started > latestStarted {
-				latestStarted = started
-				latestKey = key
-			}
-		}
-
-		cursor = next
-		if cursor == 0 {
-			break
-		}
+	// Get the highest-scored (most recent) session ID from the sorted set
+	ids, err := s.rdb.ZRevRange(ctx, "project_sessions:"+project, 0, 0).Result()
+	if err != nil {
+		return nil, fmt.Errorf("get last session: %w", err)
 	}
-
-	if latestKey == "" {
+	if len(ids) == 0 {
 		return nil, nil // No previous session
 	}
 
-	vals, err := s.rdb.HGetAll(ctx, latestKey).Result()
+	key := "session:" + ids[0]
+	vals, err := s.rdb.HGetAll(ctx, key).Result()
 	if err != nil {
 		return nil, fmt.Errorf("get session: %w", err)
 	}
+	if len(vals) == 0 {
+		return nil, nil // Session hash was deleted
+	}
 
-	return hashToSession(latestKey, vals), nil
+	return hashToSession(key, vals), nil
 }
 
 // GetTopMemories retrieves top memories by importance for a project.

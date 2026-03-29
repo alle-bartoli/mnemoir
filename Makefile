@@ -1,4 +1,4 @@
-.PHONY: help build install test docker-up docker-down redis-ui setup mcp-register clean
+.PHONY: help build install uninstall test docker-up docker-down redis-ui setup mcp-register clean
 
 BINARY := agentmem
 BIN_DIR := bin
@@ -10,6 +10,7 @@ help:
 	@echo "Available targets:"
 	@echo "  make build         - Build binary to bin/$(BINARY)"
 	@echo "  make install       - Install binary to \$$GOPATH/bin"
+	@echo "  make uninstall     - Remove binary, MCP registration, and config"
 	@echo "  make test          - Run all tests"
 	@echo "  make docker-up     - Start Redis Stack (Redis + RedisInsight)"
 	@echo "  make docker-down   - Stop Redis Stack"
@@ -23,6 +24,17 @@ build:
 
 install:
 	go install $(CMD_DIR)
+
+uninstall:
+	@echo "Removing binary from GOPATH..."
+	rm -f $(shell go env GOPATH)/bin/$(BINARY)
+	@echo "Removing MCP registration..."
+	-claude mcp remove $(BINARY) 2>/dev/null
+	@echo "Removing config directory $(CONFIG_DIR)..."
+	rm -rf $(CONFIG_DIR)
+	@echo "Removing build artifacts..."
+	rm -rf $(BIN_DIR)
+	@echo "agentmem uninstalled."
 
 test:
 	go test ./...
@@ -38,12 +50,16 @@ redis-ui:
 	@open $(REDIS_UI_URL) || xdg-open $(REDIS_UI_URL) || echo "Please open $(REDIS_UI_URL) manually"
 
 setup: docker-up build
-	@mkdir -p $(CONFIG_DIR)
+	@mkdir -p -m 700 $(CONFIG_DIR)
 	@if [ ! -f $(CONFIG_DIR)/config.toml ]; then \
 		cp config/default.toml $(CONFIG_DIR)/config.toml; \
+		chmod 600 $(CONFIG_DIR)/config.toml; \
 		echo "Config copied to $(CONFIG_DIR)/config.toml"; \
 	else \
 		echo "Config already exists at $(CONFIG_DIR)/config.toml"; \
+	fi
+	@if [ -z "$$AGENTMEM_REDIS_PASSWORD" ]; then \
+		echo "WARNING: AGENTMEM_REDIS_PASSWORD is not set. Set it before starting Redis."; \
 	fi
 
 mcp-register: build

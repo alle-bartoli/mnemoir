@@ -153,6 +153,137 @@ func TestStore(t *testing.T) {
 			t.Errorf("ListProjects did not include %q, got %v", testProject, projects)
 		}
 	})
+
+	t.Run("SessionSaveAndGetLast", func(t *testing.T) {
+		store := newTestStore(t)
+		ctx := context.Background()
+
+		sess1 := &memory.Session{
+			ID: "test-sess-001", Project: testProject,
+			StartedAt: time.Now().Add(-2 * time.Hour).Unix(),
+			Summary:   "first session",
+		}
+		sess2 := &memory.Session{
+			ID: "test-sess-002", Project: testProject,
+			StartedAt: time.Now().Unix(),
+			Summary:   "second session",
+		}
+
+		if err := store.SaveSession(ctx, sess1); err != nil {
+			t.Fatalf("SaveSession 1: %v", err)
+		}
+		if err := store.SaveSession(ctx, sess2); err != nil {
+			t.Fatalf("SaveSession 2: %v", err)
+		}
+
+		last, err := store.GetLastSession(ctx, testProject)
+		if err != nil {
+			t.Fatalf("GetLastSession: %v", err)
+		}
+		if last == nil {
+			t.Fatal("GetLastSession returned nil")
+		}
+		if last.ID != "test-sess-002" {
+			t.Errorf("GetLastSession ID = %q, want test-sess-002", last.ID)
+		}
+		if last.Summary != "second session" {
+			t.Errorf("Summary = %q, want 'second session'", last.Summary)
+		}
+	})
+
+	t.Run("GetLastSessionNoSessions", func(t *testing.T) {
+		store := newTestStore(t)
+		ctx := context.Background()
+
+		last, err := store.GetLastSession(ctx, "nonexistent-project")
+		if err != nil {
+			t.Fatalf("GetLastSession: %v", err)
+		}
+		if last != nil {
+			t.Errorf("expected nil for project with no sessions, got %+v", last)
+		}
+	})
+
+	t.Run("GetStats", func(t *testing.T) {
+		store, _ := newSearchTestStore(t)
+		ctx := context.Background()
+
+		stats, err := store.GetStats(ctx, searchTestProject)
+		if err != nil {
+			t.Fatalf("GetStats: %v", err)
+		}
+
+		// testMemories() creates 8 memories: 4 facts, 3 concepts, 1 narrative
+		if stats.Total < 8 {
+			t.Errorf("Total = %d, want >= 8", stats.Total)
+		}
+		if stats.ByType["fact"] < 4 {
+			t.Errorf("ByType[fact] = %d, want >= 4", stats.ByType["fact"])
+		}
+		if stats.ByType["concept"] < 3 {
+			t.Errorf("ByType[concept] = %d, want >= 3", stats.ByType["concept"])
+		}
+		if stats.AvgImportance == 0 {
+			t.Error("AvgImportance should be > 0")
+		}
+		t.Logf("Stats: total=%d, by_type=%v, avg_imp=%.2f", stats.Total, stats.ByType, stats.AvgImportance)
+	})
+
+	t.Run("GetTopMemories", func(t *testing.T) {
+		store, _ := newSearchTestStore(t)
+		ctx := context.Background()
+
+		top, err := store.GetTopMemories(ctx, searchTestProject, 3)
+		if err != nil {
+			t.Fatalf("GetTopMemories: %v", err)
+		}
+		if len(top) == 0 {
+			t.Fatal("GetTopMemories returned 0 results")
+		}
+		if len(top) > 3 {
+			t.Errorf("GetTopMemories returned %d results, want <= 3", len(top))
+		}
+
+		// Results should be sorted by importance DESC
+		for i := 1; i < len(top); i++ {
+			if top[i].Importance > top[i-1].Importance {
+				t.Errorf("not sorted by importance DESC: [%d]=%d > [%d]=%d",
+					i, top[i].Importance, i-1, top[i-1].Importance)
+			}
+		}
+		t.Logf("Top memories: %d returned, first importance=%d", len(top), top[0].Importance)
+	})
+}
+
+// TestValidateTagValue tests the TAG injection prevention regex. No Redis needed.
+func TestValidateTagValue(t *testing.T) {
+	valid := []string{"redis", "my-tag", "v1.0", "go_lang", "test123"}
+	for _, v := range valid {
+		if err := memory.ValidateTagValue(v); err != nil {
+			t.Errorf("ValidateTagValue(%q) should be valid, got: %v", v, err)
+		}
+	}
+
+	invalid := []string{"foo|bar", "@inject", "a{b}", "", "a b", "tag;drop", "foo*", "a(b)"}
+	for _, v := range invalid {
+		if err := memory.ValidateTagValue(v); err == nil {
+			t.Errorf("ValidateTagValue(%q) should be invalid, got nil", v)
+		}
+	}
+}
+
+// TestValidMemoryType tests type validation. No Redis needed.
+func TestValidMemoryType(t *testing.T) {
+	for _, v := range []string{"fact", "concept", "narrative"} {
+		if !memory.ValidMemoryType(v) {
+			t.Errorf("ValidMemoryType(%q) should be true", v)
+		}
+	}
+	for _, v := range []string{"", "invalid", "FACT", "Concept"} {
+		if memory.ValidMemoryType(v) {
+			t.Errorf("ValidMemoryType(%q) should be false", v)
+		}
+	}
 }
 
 // TestEffectiveImportance groups pure unit tests for the decay/boost formula.

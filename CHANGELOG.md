@@ -9,11 +9,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `make uninstall` target: removes binary from `$GOPATH/bin`, MCP registration, config directory (`~/.agentmem`), and build artifacts
+- End-to-end example in `docs/architecture.md` illustrating the full agent lifecycle (start session, store, recall, end session, next session)
 - Auto-summarize implementation: `end_session` now generates a summary from extracted memories when none is provided and `session.auto_summarize` is enabled
 - `buildAutoSummary()` helper that produces a summary with memory counts and up to 3 key points
+- `IEmbedder.Close()` method for proper resource cleanup (ONNX session, HTTP clients)
+- `Config.Validate()` method for fail-fast config validation at load time (checks providers, dimension, decay params, weight sums, importance range)
+- `validateTags()` per-tag validation against TAG allowlist in `StoreMemory` and `UpdateMemory`
+- Atomic `UpdateAccess` via Redis Lua script (replaces non-atomic read-modify-write pipeline)
+- `/healthz` sideband HTTP endpoint (configurable via `server.health_addr`) exposing Redis connectivity status
+- Structured logging with `log/slog` (JSON output to `~/.agentmem/agentmem.log`), replaces all `log.Printf` calls
+- `slogWriter` bridge to redirect standard `log` package output into slog
 - Security section in `docs/architecture.md` covering input validation, injection prevention, network safety, cryptography, and concurrency
 - Search internals documented in `docs/tools-reference.md` (vector, fulltext, hybrid merge algorithm)
 - Local compressor classification rules documented in `docs/configuration.md`
+- `test/config/config_test.go`: 14 unit tests for `Config.Validate()` covering all invariants (providers, dimension, decay, weights, importance, session)
+- `TestValidateTagValue` and `TestValidMemoryType` pure unit tests (no Redis)
+- `TestStore/SessionSaveAndGetLast`, `GetLastSessionNoSessions`, `GetStats`, `GetTopMemories` integration tests
+- `TestHybridSearchSingleAccessCount` verifying single access increment per unique result
 
 ### Changed
 
@@ -22,6 +35,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Fixed hybrid search weights in `docs/architecture.md` (was 0.7/0.3, now correctly 0.60/0.25/0.15)
 - Go version requirement updated from 1.21+ to 1.25+ across all docs (README, setup, implementation guide)
 - Session settings comments updated in `docs/configuration.md` to reflect actual behavior
+- `HybridSearch` now uses raw search methods internally to prevent double `access_count` increment on overlapping results
+- `GetLastSession` replaced O(N) SCAN with O(log N) sorted set lookup (`project_sessions:{project}`)
+- `GetStats` uses `FT.AGGREGATE` for server-side computation (no 10k result cap), falls back to legacy FT.SEARCH
+- `SaveSession` now indexes sessions in a sorted set for fast latest-session retrieval
+- Graceful shutdown removes `os.Exit(0)` from signal handler, defers now execute properly (embedder close, Redis close)
+- `UpdateMemory` validates content length, tags, importance range, and ULID format
+- `Recall` limit parameter clamped server-side to `[1, 100]` regardless of schema validation
+- Error response in `UpdateMemory` sanitized to not leak internal details
+- Replaced all `log.Printf`/`log.Fatalf` with structured `slog` calls across all packages
+- Test cleanup helpers now remove `session:test-*` keys and `project_sessions:{project}` sorted sets
+
+### Security
+
+- Hardcoded `changeme` Redis password removed from `config/default.toml` and `docker-compose.yml`
+- `docker-compose.yml`: Redis fails to start without `AGENTMEM_REDIS_PASSWORD` env var (was silent fallback)
+- `Makefile`: config directory created with `0700` permissions, config file with `0600`
+- Docker: added `restart: unless-stopped`, memory limit (512MB), `maxmemory` policy, healthcheck
+- Per-tag validation in `StoreMemory` and `UpdateMemory` prevents TAG injection via comma-separated values
 
 ## [Unreleased] - 2026-03-28 (Alessandro Bartoli)
 

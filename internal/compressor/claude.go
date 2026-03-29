@@ -6,7 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"log"
+	"log/slog"
 	"net/http"
 	"os"
 	"time"
@@ -97,7 +97,7 @@ func (c *ClaudeCompressor) Compress(ctx context.Context, observations string) (*
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		log.Printf("anthropic API error (status %d): %s", resp.StatusCode, string(respBody)) // Security: log full error internally
+		slog.Error("anthropic API error", "status", resp.StatusCode, "body", string(respBody))
 		return nil, fmt.Errorf("compressor service error (status %d)", resp.StatusCode)     // Security: return generic error to caller
 	}
 

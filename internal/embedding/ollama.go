@@ -6,7 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"log"
+	"log/slog"
 	"net/http"
 	"net/url"
 	"time"
@@ -99,7 +99,7 @@ func (e *OllamaEmbedder) Embed(ctx context.Context, text string) ([]float32, err
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		log.Printf("ollama embedding API error (status %d): %s", resp.StatusCode, string(respBody)) // Security: log full error internally
+		slog.Error("ollama embedding API error", "status", resp.StatusCode, "body", string(respBody))
 		return nil, fmt.Errorf("embedding service error (status %d)", resp.StatusCode)              // Security: return generic error to caller
 	}
 
@@ -123,3 +123,6 @@ func (e *OllamaEmbedder) Embed(ctx context.Context, text string) ([]float32, err
 func (e *OllamaEmbedder) Dimension() int {
 	return e.dimension
 }
+
+// Close is a no-op for HTTP-based embedders.
+func (e *OllamaEmbedder) Close() error { return nil }

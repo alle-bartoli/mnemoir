@@ -5,7 +5,7 @@ import (
 	"crypto/rand"
 	"encoding/json"
 	"fmt"
-	"log"
+	"log/slog"
 	"strings"
 	"sync"
 	"time"
@@ -23,11 +23,27 @@ const (
 	maxQueryLen   = 4_000  // 4KB
 	maxProjectLen = 128
 	maxTagsLen    = 1_000
+	maxLimit      = 100
+	minLimit      = 1
 )
 
 func validateLength(name, value string, max int) error {
 	if len(value) > max {
 		return fmt.Errorf("%s exceeds max length (%d > %d)", name, len(value), max)
+	}
+	return nil
+}
+
+// validateTags splits comma-separated tags and validates each against the TAG allowlist.
+func validateTags(tags string) error {
+	for _, tag := range strings.Split(tags, ",") {
+		tag = strings.TrimSpace(tag)
+		if tag == "" {
+			continue
+		}
+		if err := memory.ValidateTagValue(tag); err != nil {
+			return fmt.Errorf("invalid tag %q: %w", tag, err)
+		}
 	}
 	return nil
 }
@@ -73,6 +89,14 @@ func (h *Handlers) StoreMemory(ctx context.Context, req mcp.CallToolRequest) (*m
 	}
 
 	tags := req.GetString("tags", "")
+	if tags != "" {
+		if err := validateLength("tags", tags, maxTagsLen); err != nil {
+			return mcp.NewToolResultError(err.Error()), nil
+		}
+		if err := validateTags(tags); err != nil {
+			return mcp.NewToolResultError(err.Error()), nil
+		}
+	}
 	importance := req.GetInt("importance", h.cfg.Memory.DefaultImportance)
 
 	now := time.Now().Unix()
@@ -125,6 +149,14 @@ func (h *Handlers) Recall(ctx context.Context, req mcp.CallToolRequest) (*mcp.Ca
 	memType := req.GetString("type", "")
 	limit := req.GetInt("limit", 10)
 	searchMode := req.GetString("search_mode", "hybrid")
+
+	// Server-side clamping: never trust schema-level validation alone
+	if limit < minLimit {
+		limit = minLimit
+	}
+	if limit > maxLimit {
+		limit = maxLimit
+	}
 
 	if project != "" {
 		if err := memory.ValidateTagValue(project); err != nil {
@@ -300,7 +332,7 @@ func (h *Handlers) EndSession(ctx context.Context, req mcp.CallToolRequest) (*mc
 	if observations != "" && h.compressor != nil && h.cfg.Session.AutoSummarize {
 		compressed, err := h.compressor.Compress(ctx, observations)
 		if err != nil {
-			log.Printf("compression failed: %v", err) // Security: log details internally
+			slog.Error("compression failed", "project", sess.Project, "error", err)
 			summary += "\n[compression failed]"           // Security: generic message in user-facing summary
 		} else {
 			memoriesCreated, _ = h.saveExtracted(ctx, compressed, sess.Project)
@@ -374,18 +406,36 @@ func (h *Handlers) UpdateMemory(ctx context.Context, req mcp.CallToolRequest) (*
 		return mcp.NewToolResultError("id is required"), nil
 	}
 
+	// Validate ID format (ULID: 26 alphanumeric chars)
+	if len(id) != 26 {
+		return mcp.NewToolResultError("id must be a valid 26-character ULID"), nil
+	}
+
 	fields := make(map[string]any)
 	updatedFields := []string{}
 
 	if content := req.GetString("content", ""); content != "" {
+		// Apply same length limit as StoreMemory
+		if err := validateLength("content", content, maxContentLen); err != nil {
+			return mcp.NewToolResultError(err.Error()), nil
+		}
 		fields["content"] = content
 		updatedFields = append(updatedFields, "content")
 	}
 	if tags := req.GetString("tags", ""); tags != "" {
+		if err := validateLength("tags", tags, maxTagsLen); err != nil {
+			return mcp.NewToolResultError(err.Error()), nil
+		}
+		if err := validateTags(tags); err != nil {
+			return mcp.NewToolResultError(err.Error()), nil
+		}
 		fields["tags"] = tags
 		updatedFields = append(updatedFields, "tags")
 	}
 	if importance := req.GetInt("importance", 0); importance > 0 {
+		if importance > 10 {
+			importance = 10
+		}
 		fields["importance"] = importance
 		updatedFields = append(updatedFields, "importance")
 	}
@@ -395,7 +445,8 @@ func (h *Handlers) UpdateMemory(ctx context.Context, req mcp.CallToolRequest) (*
 	}
 
 	if err := h.store.Update(ctx, id, fields); err != nil {
-		return mcp.NewToolResultError(fmt.Sprintf("update failed: %v", err)), nil
+		// Security: do not leak internal error details
+		return mcp.NewToolResultError("update failed"), nil
 	}
 
 	result := map[string]any{

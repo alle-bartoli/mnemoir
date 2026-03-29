@@ -86,6 +86,11 @@ type SessionConfig struct {
 	MaxRecallItems int  `toml:"max_recall_items"`
 }
 
+// ServerConfig holds server-level settings.
+type ServerConfig struct {
+	HealthAddr string `toml:"health_addr"` // e.g. ":9090", empty to disable
+}
+
 // Config is the root configuration struct.
 type Config struct {
 	Redis      RedisConfig      `toml:"redis"`
@@ -93,6 +98,7 @@ type Config struct {
 	Embedding  EmbeddingConfig  `toml:"embedding"`
 	Memory     MemoryConfig     `toml:"memory"`
 	Session    SessionConfig    `toml:"session"`
+	Server     ServerConfig     `toml:"server"`
 }
 
 // DefaultConfigPath returns ~/.agentmem/config.toml.
@@ -162,7 +168,58 @@ func Load(path string) (*Config, error) {
 		return nil, fmt.Errorf("parse config: %w", err)
 	}
 
+	if err := cfg.Validate(); err != nil {
+		return nil, fmt.Errorf("invalid config: %w", err)
+	}
+
 	return cfg, nil
+}
+
+// Validate checks all config invariants and returns the first error found.
+func (c *Config) Validate() error {
+	// Embedding
+	validProviders := map[string]bool{"openai": true, "ollama": true, "local": true}
+	if !validProviders[c.Embedding.Provider] {
+		return fmt.Errorf("embedding.provider must be one of: openai, ollama, local (got %q)", c.Embedding.Provider)
+	}
+	if c.Embedding.Dimension <= 0 {
+		return fmt.Errorf("embedding.dimension must be > 0 (got %d)", c.Embedding.Dimension)
+	}
+
+	// Compressor
+	validCompressors := map[string]bool{"claude": true, "ollama": true, "local": true}
+	if !validCompressors[c.Compressor.Provider] {
+		return fmt.Errorf("compressor.provider must be one of: claude, ollama, local (got %q)", c.Compressor.Provider)
+	}
+
+	// Memory
+	if c.Memory.DefaultImportance < 1 || c.Memory.DefaultImportance > 10 {
+		return fmt.Errorf("memory.default_importance must be 1-10 (got %d)", c.Memory.DefaultImportance)
+	}
+	if c.Memory.DecayFactor <= 0 || c.Memory.DecayFactor >= 1 {
+		return fmt.Errorf("memory.decay_factor must be in (0, 1) (got %f)", c.Memory.DecayFactor)
+	}
+	if _, err := time.ParseDuration(c.Memory.DecayInterval); err != nil {
+		return fmt.Errorf("memory.decay_interval is not a valid duration: %w", err)
+	}
+	// Weights should approximately sum to 1.0 (allow small tolerance)
+	weightSum := c.Memory.VectorWeight + c.Memory.FTSWeight + c.Memory.ImportanceWeight
+	if weightSum < 0.9 || weightSum > 1.1 {
+		return fmt.Errorf("memory weights (vector+fts+importance) should sum to ~1.0 (got %.2f)", weightSum)
+	}
+	if c.Memory.AccessBoostFactor < 0 {
+		return fmt.Errorf("memory.access_boost_factor must be >= 0 (got %f)", c.Memory.AccessBoostFactor)
+	}
+	if c.Memory.AccessBoostCap < 0 {
+		return fmt.Errorf("memory.access_boost_cap must be >= 0 (got %f)", c.Memory.AccessBoostCap)
+	}
+
+	// Session
+	if c.Session.MaxRecallItems <= 0 {
+		return fmt.Errorf("session.max_recall_items must be > 0 (got %d)", c.Session.MaxRecallItems)
+	}
+
+	return nil
 }
 
 // Security: only these env vars are expanded in config TOML

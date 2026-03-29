@@ -14,9 +14,12 @@ import (
 //   - Embedding models natively return float32
 //   - Halves memory usage compared to float64 (4 bytes vs 8 per dimension)
 //   - The extra precision of float64 is irrelevant for similarity search
+//
+// Close releases provider resources (e.g. ONNX session). Callers must defer Close().
 type IEmbedder interface {
 	Embed(ctx context.Context, text string) ([]float32, error)
 	Dimension() int
+	Close() error
 }
 
 // @dev NewEmbedder creates an embedder based on config provider (factory pattern).

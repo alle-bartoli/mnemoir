@@ -6,7 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"log"
+	"log/slog"
 	"net/http"
 	"os"
 	"time"
@@ -86,7 +86,7 @@ func (e *OpenAIEmbedder) Embed(ctx context.Context, text string) ([]float32, err
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		log.Printf("openai API error (status %d): %s", resp.StatusCode, string(respBody)) // Security: log full error internally
+		slog.Error("openai API error", "status", resp.StatusCode, "body", string(respBody))
 		return nil, fmt.Errorf("embedding service error (status %d)", resp.StatusCode)   // Security: return generic error to caller
 	}
 
@@ -110,3 +110,6 @@ func (e *OpenAIEmbedder) Embed(ctx context.Context, text string) ([]float32, err
 func (e *OpenAIEmbedder) Dimension() int {
 	return e.dimension
 }
+
+// Close is a no-op for HTTP-based embedders.
+func (e *OpenAIEmbedder) Close() error { return nil }

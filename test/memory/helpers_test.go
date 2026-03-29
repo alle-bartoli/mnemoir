@@ -55,6 +55,12 @@ func newTestStore(t *testing.T) *memory.Store {
 		if len(keys) > 0 {
 			rdb.Del(ctx, keys...)
 		}
+		// Clean up session keys and sorted sets created by SaveSession
+		sessKeys, _ := rdb.Keys(ctx, "session:test-*").Result()
+		if len(sessKeys) > 0 {
+			rdb.Del(ctx, sessKeys...)
+		}
+		rdb.Del(ctx, "project_sessions:"+testProject)
 		rdb.SRem(ctx, "projects", testProject)
 		_ = emb.Close()
 		_ = rdb.Close()
@@ -106,6 +112,12 @@ func newSearchTestStore(t *testing.T) (*memory.Store, *goredis.Client) {
 		for _, m := range mems {
 			_ = rdb.Del(ctx, "mem:"+m.ID).Err()
 		}
+		// Clean up session keys and sorted sets created by SaveSession
+		sessKeys, _ := rdb.Keys(ctx, "session:test-*").Result()
+		if len(sessKeys) > 0 {
+			rdb.Del(ctx, sessKeys...)
+		}
+		rdb.Del(ctx, "project_sessions:"+searchTestProject)
 		rdb.SRem(ctx, "projects", searchTestProject)
 		_ = emb.Close()
 		_ = rdb.Close()

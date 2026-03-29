@@ -185,6 +185,7 @@ make docker-down  # Stop Redis Stack
 make redis-ui     # Open RedisInsight web UI (http://localhost:8001)
 make clean        # Clean build artifacts
 make install      # Install to $GOPATH/bin
+make uninstall    # Remove binary, MCP registration, and config
 ```
 
 ### RedisInsight

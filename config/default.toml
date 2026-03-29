@@ -1,6 +1,6 @@
 [redis]
 addr = "localhost:6379"
-password = "changeme" # override via AGENTMEM_REDIS_PASSWORD env var
+password = "$AGENTMEM_REDIS_PASSWORD" # set env var before starting
 db = 0
 
 [compressor]
@@ -47,3 +47,6 @@ access_boost_cap = 2.0     # max boost from recalls
 [session]
 auto_summarize = true
 max_recall_items = 20
+
+[server]
+health_addr = "" # e.g. ":9090" to enable /healthz endpoint, empty to disable
