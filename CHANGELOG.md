@@ -7,9 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased] - 2026-03-29 (Alessandro Bartoli)
 
+### Changed
+
+- Project renamed from `agentmem` to `mnemoir` (mnemonic + memoir)
+- Go module: `github.com/alle-bartoli/agentmem` to `github.com/alle-bartoli/mnemoir`
+- Binary: `agentmem` to `mnemoir`
+- Config directory: `~/.agentmem/` to `~/.mnemoir/`
+- Log file: `agentmem.log` to `mnemoir.log`
+- Env var: `AGENTMEM_REDIS_PASSWORD` to `MNEMOIR_REDIS_PASSWORD`
+- MCP server name: `agentmem` to `mnemoir`
+- Entry point directory: `cmd/agentmem/` to `cmd/mnemoir/`
+- All documentation, README, and client registration examples updated
+
+## [Unreleased] - 2026-03-29 (Alessandro Bartoli)
+
 ### Added
 
-- `make uninstall` target: removes binary from `$GOPATH/bin`, MCP registration, config directory (`~/.agentmem`), and build artifacts
+- `make uninstall` target: removes binary from `$GOPATH/bin`, MCP registration, config directory (`~/.mnemoir`), and build artifacts
 - End-to-end example in `docs/architecture.md` illustrating the full agent lifecycle (start session, store, recall, end session, next session)
 - Auto-summarize implementation: `end_session` now generates a summary from extracted memories when none is provided and `session.auto_summarize` is enabled
 - `buildAutoSummary()` helper that produces a summary with memory counts and up to 3 key points
@@ -18,7 +32,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `validateTags()` per-tag validation against TAG allowlist in `StoreMemory` and `UpdateMemory`
 - Atomic `UpdateAccess` via Redis Lua script (replaces non-atomic read-modify-write pipeline)
 - `/healthz` sideband HTTP endpoint (configurable via `server.health_addr`) exposing Redis connectivity status
-- Structured logging with `log/slog` (JSON output to `~/.agentmem/agentmem.log`), replaces all `log.Printf` calls
+- Structured logging with `log/slog` (JSON output to `~/.mnemoir/mnemoir.log`), replaces all `log.Printf` calls
 - `slogWriter` bridge to redirect standard `log` package output into slog
 - Security section in `docs/architecture.md` covering input validation, injection prevention, network safety, cryptography, and concurrency
 - Search internals documented in `docs/tools-reference.md` (vector, fulltext, hybrid merge algorithm)
@@ -57,7 +71,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Security
 
 - Hardcoded `changeme` Redis password removed from `config/default.toml` and `docker-compose.yml`
-- `docker-compose.yml`: Redis fails to start without `AGENTMEM_REDIS_PASSWORD` env var (was silent fallback)
+- `docker-compose.yml`: Redis fails to start without `MNEMOIR_REDIS_PASSWORD` env var (was silent fallback)
 - `Makefile`: config directory created with `0700` permissions, config file with `0600`
 - Docker: added `restart: unless-stopped`, memory limit (512MB), `maxmemory` policy, healthcheck
 - Per-tag validation in `StoreMemory` and `UpdateMemory` prevents TAG injection via comma-separated values
@@ -86,9 +100,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Security
 
-- Redis bound to `127.0.0.1` with `requirepass` via `AGENTMEM_REDIS_PASSWORD` env var
+- Redis bound to `127.0.0.1` with `requirepass` via `MNEMOIR_REDIS_PASSWORD` env var
 - TAG injection prevented via `ValidateTagValue` allowlist regex at handler boundary
-- `os.ExpandEnv` replaced with allowlist (`expandAllowedEnv`) for `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `HOME`, `AGENTMEM_REDIS_PASSWORD`
+- `os.ExpandEnv` replaced with allowlist (`expandAllowedEnv`) for `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `HOME`, `MNEMOIR_REDIS_PASSWORD`
 - HTTP client timeout (30s) on all external API calls (OpenAI, Ollama, Anthropic)
 - `sync.Mutex` on `activeSession` to prevent race conditions
 - Input length validation (`content` 50KB, `query` 4KB, `project` 128, `tags` 1KB)

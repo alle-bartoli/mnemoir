@@ -5,7 +5,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/alle-bartoli/agentmem/internal/config"
+	"github.com/alle-bartoli/mnemoir/internal/config"
 )
 
 // @dev IEmbedder generates vector embeddings from text.

@@ -1,4 +1,4 @@
-# Agentmem
+# Mnemoir
 
 MCP server that gives AI coding agents long-term memory.
 Runs as a child process via stdio transport, backed by Redis Stack.
@@ -27,7 +27,7 @@ Fully offline-capable, no API keys required.
 
 ```bash
 # Set Redis password
-export AGENTMEM_REDIS_PASSWORD="your-secret"
+export MNEMOIR_REDIS_PASSWORD="your-secret"
 
 # Start Redis Stack and build binary
 make setup
@@ -36,7 +36,7 @@ make setup
 make mcp-register   # Claude Code
 ```
 
-Edit `~/.agentmem/config.toml` to customize providers and behavior.
+Edit `~/.mnemoir/config.toml` to customize providers and behavior.
 
 Optional API keys (not needed with default `local` providers):
 
@@ -47,7 +47,7 @@ export OPENAI_API_KEY="sk-..."            # Only for OpenAI embeddings
 
 ## MCP Client Registration
 
-Agentmem works with any MCP-compatible coding agent via stdio transport.
+Mnemoir works with any MCP-compatible coding agent via stdio transport.
 
 ### Claude Code
 
@@ -58,7 +58,7 @@ make mcp-register
 Or manually:
 
 ```bash
-claude mcp add --transport stdio agentmem -- /path/to/bin/agentmem --config ~/.agentmem/config.toml
+claude mcp add --transport stdio mnemoir -- /path/to/bin/mnemoir --config ~/.mnemoir/config.toml
 ```
 
 ### Cursor
@@ -68,9 +68,9 @@ Settings > MCP Servers > Add new server:
 ```json
 {
   "mcpServers": {
-    "agentmem": {
-      "command": "/path/to/bin/agentmem",
-      "args": ["--config", "~/.agentmem/config.toml"]
+    "mnemoir": {
+      "command": "/path/to/bin/mnemoir",
+      "args": ["--config", "~/.mnemoir/config.toml"]
     }
   }
 }
@@ -83,9 +83,9 @@ Settings > MCP > Add server:
 ```json
 {
   "mcpServers": {
-    "agentmem": {
-      "command": "/path/to/bin/agentmem",
-      "args": ["--config", "~/.agentmem/config.toml"]
+    "mnemoir": {
+      "command": "/path/to/bin/mnemoir",
+      "args": ["--config", "~/.mnemoir/config.toml"]
     }
   }
 }
@@ -99,9 +99,9 @@ Add to `~/.continue/config.json`:
 {
   "mcpServers": [
     {
-      "name": "agentmem",
-      "command": "/path/to/bin/agentmem",
-      "args": ["--config", "~/.agentmem/config.toml"]
+      "name": "mnemoir",
+      "command": "/path/to/bin/mnemoir",
+      "args": ["--config", "~/.mnemoir/config.toml"]
     }
   ]
 }
@@ -114,9 +114,9 @@ Settings > MCP Servers > Add:
 ```json
 {
   "mcpServers": {
-    "agentmem": {
-      "command": "/path/to/bin/agentmem",
-      "args": ["--config", "~/.agentmem/config.toml"]
+    "mnemoir": {
+      "command": "/path/to/bin/mnemoir",
+      "args": ["--config", "~/.mnemoir/config.toml"]
     }
   }
 }
@@ -130,20 +130,20 @@ Add to `~/.config/zed/settings.json`:
 {
   "language_models": {
     "mcp": {
-      "agentmem": {
-        "command": "/path/to/bin/agentmem",
-        "args": ["--config", "~/.agentmem/config.toml"]
+      "mnemoir": {
+        "command": "/path/to/bin/mnemoir",
+        "args": ["--config", "~/.mnemoir/config.toml"]
       }
     }
   }
 }
 ```
 
-Replace `/path/to/bin/agentmem` with the actual binary path (e.g. the output of `which agentmem` after `make install`, or `$(pwd)/bin/agentmem` for local builds).
+Replace `/path/to/bin/mnemoir` with the actual binary path (e.g. the output of `which mnemoir` after `make install`, or `$(pwd)/bin/mnemoir` for local builds).
 
 ## Configuration
 
-Default configuration copied to `~/.agentmem/config.toml` on first setup.
+Default configuration copied to `~/.mnemoir/config.toml` on first setup.
 
 | Key                          | Default | Description                                   |
 | ---------------------------- | ------- | --------------------------------------------- |
@@ -233,7 +233,7 @@ Set `importance_weight = 0` to disable importance scoring. Set `auto_decay = fal
 ## Architecture
 
 ```
-Client <--stdio/JSON-RPC--> agentmem <--TCP--> Redis Stack
+Client <--stdio/JSON-RPC--> mnemoir <--TCP--> Redis Stack
                                      |
                                      +--> OpenAI API (embeddings)
                                      +--> Anthropic API (compression)
@@ -248,13 +248,13 @@ Client <--stdio/JSON-RPC--> agentmem <--TCP--> Redis Stack
 | Embeddings | OpenAI / Ollama / Local     | `text-embedding-3-small` (1536d), `nomic-embed-text` (768d), or `all-MiniLM-L6-v2` (384d) |
 | Compressor | Claude API / Ollama / Local | Structured memory extraction from raw observations                                        |
 | IDs        | ULID                        | Chronologically sortable unique identifiers                                               |
-| Config     | TOML                        | `~/.agentmem/config.toml`                                                                 |
+| Config     | TOML                        | `~/.mnemoir/config.toml`                                                                 |
 
 ### Directory structure
 
 ```
-agentmem/
-├── cmd/agentmem/        # Entry point, CLI flags
+mnemoir/
+├── cmd/mnemoir/        # Entry point, CLI flags
 ├── internal/
 │   ├── compressor/      # Memory extraction (Claude API, Ollama, local rules)
 │   ├── config/          # TOML configuration loading
@@ -326,7 +326,7 @@ FT.AGGREGATE idx:memories "*" GROUPBY 1 @project REDUCE COUNT 0 AS count
 
 1. Install Delve: `go install github.com/go-delve/delve/cmd/dlv@latest`
 2. Ensure Redis is running: `make docker-up`
-3. Open a Go file: `nvim cmd/agentmem/main.go`
+3. Open a Go file: `nvim cmd/mnemoir/main.go`
 4. Set breakpoint: `<leader>db`
 5. Start debugger: `<leader>dc` then select "Debug Package"
 

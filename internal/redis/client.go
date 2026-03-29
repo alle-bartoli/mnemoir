@@ -11,7 +11,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/alle-bartoli/agentmem/internal/config"
+	"github.com/alle-bartoli/mnemoir/internal/config"
 	"github.com/redis/go-redis/v9"
 )
 

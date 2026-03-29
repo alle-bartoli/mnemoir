@@ -101,22 +101,22 @@ type Config struct {
 	Server     ServerConfig     `toml:"server"`
 }
 
-// DefaultConfigPath returns ~/.agentmem/config.toml.
+// DefaultConfigPath returns ~/.mnemoir/config.toml.
 func DefaultConfigPath() string {
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return "config.toml"
 	}
-	return filepath.Join(home, ".agentmem", "config.toml")
+	return filepath.Join(home, ".mnemoir", "config.toml")
 }
 
-// EnsureConfigDir creates ~/.agentmem if it doesn't exist.
+// EnsureConfigDir creates ~/.mnemoir if it doesn't exist.
 func EnsureConfigDir() error {
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return fmt.Errorf("get home dir: %w", err)
 	}
-	dir := filepath.Join(home, ".agentmem")
+	dir := filepath.Join(home, ".mnemoir")
 	return os.MkdirAll(dir, 0o700) // Security: restrict dir to owner only
 }
 
@@ -145,7 +145,7 @@ func Load(path string) (*Config, error) {
 			Dimension: 1536,
 			OpenAI:    EmbeddingOpenAIConfig{Model: "text-embedding-3-small"},
 			Ollama:    EmbeddingOllamaConfig{URL: "http://localhost:11434", Model: "nomic-embed-text"},
-			Local:     EmbeddingLocalConfig{Model: "sentence-transformers/all-MiniLM-L6-v2", ModelDir: "~/.agentmem/models"},
+			Local:     EmbeddingLocalConfig{Model: "sentence-transformers/all-MiniLM-L6-v2", ModelDir: "~/.mnemoir/models"},
 		},
 		Memory: MemoryConfig{
 			DefaultImportance: 5,
@@ -227,7 +227,7 @@ var allowedEnvVars = map[string]bool{
 	"ANTHROPIC_API_KEY":       true,
 	"OPENAI_API_KEY":          true,
 	"HOME":                    true,
-	"AGENTMEM_REDIS_PASSWORD": true,
+	"MNEMOIR_REDIS_PASSWORD": true,
 }
 
 func expandAllowedEnv(s string) string {

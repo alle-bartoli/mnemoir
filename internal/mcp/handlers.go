@@ -10,9 +10,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/alle-bartoli/agentmem/internal/compressor"
-	"github.com/alle-bartoli/agentmem/internal/config"
-	"github.com/alle-bartoli/agentmem/internal/memory"
+	"github.com/alle-bartoli/mnemoir/internal/compressor"
+	"github.com/alle-bartoli/mnemoir/internal/config"
+	"github.com/alle-bartoli/mnemoir/internal/memory"
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/oklog/ulid/v2"
 )

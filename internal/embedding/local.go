@@ -7,7 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/alle-bartoli/agentmem/internal/config"
+	"github.com/alle-bartoli/mnemoir/internal/config"
 	"github.com/knights-analytics/hugot"
 	"github.com/knights-analytics/hugot/pipelines"
 )

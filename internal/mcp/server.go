@@ -2,9 +2,9 @@
 package mcp
 
 import (
-	"github.com/alle-bartoli/agentmem/internal/compressor"
-	"github.com/alle-bartoli/agentmem/internal/config"
-	"github.com/alle-bartoli/agentmem/internal/memory"
+	"github.com/alle-bartoli/mnemoir/internal/compressor"
+	"github.com/alle-bartoli/mnemoir/internal/config"
+	"github.com/alle-bartoli/mnemoir/internal/memory"
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
 )
@@ -12,7 +12,7 @@ import (
 // NewServer creates an MCP server with all tools registered.
 func NewServer(store *memory.Store, comp compressor.ICompressor, cfg *config.Config) *server.MCPServer {
 	s := server.NewMCPServer(
-		"agentmem",
+		"mnemoir",
 		"1.0.0",
 		server.WithToolCapabilities(true),
 	)

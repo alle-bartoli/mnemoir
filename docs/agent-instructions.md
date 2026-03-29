@@ -1,10 +1,10 @@
 # Agent Instructions
 
-Copy the block below into your project's `CLAUDE.md` (or equivalent system prompt for other agents) to teach the agent how to use agentmem.
+Copy the block below into your project's `CLAUDE.md` (or equivalent system prompt for other agents) to teach the agent how to use mnemoir.
 
 ---
 
-## Memory (agentmem)
+## Memory (mnemoir)
 
 You have access to a persistent memory system via MCP tools. Use it to retain knowledge across sessions.
 

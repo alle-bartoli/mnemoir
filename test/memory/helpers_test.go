@@ -5,10 +5,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/alle-bartoli/agentmem/internal/config"
-	"github.com/alle-bartoli/agentmem/internal/embedding"
-	"github.com/alle-bartoli/agentmem/internal/memory"
-	redisclient "github.com/alle-bartoli/agentmem/internal/redis"
+	"github.com/alle-bartoli/mnemoir/internal/config"
+	"github.com/alle-bartoli/mnemoir/internal/embedding"
+	"github.com/alle-bartoli/mnemoir/internal/memory"
+	redisclient "github.com/alle-bartoli/mnemoir/internal/redis"
 	goredis "github.com/redis/go-redis/v9"
 )
 
@@ -42,7 +42,7 @@ func newTestStore(t *testing.T) *memory.Store {
 
 	emb, err := embedding.NewLocalEmbedder(config.EmbeddingLocalConfig{
 		Model:    "sentence-transformers/all-MiniLM-L6-v2",
-		ModelDir: "~/.agentmem/models",
+		ModelDir: "~/.mnemoir/models",
 	}, 384)
 	if err != nil {
 		t.Fatalf("NewLocalEmbedder: %v", err)
@@ -91,7 +91,7 @@ func newSearchTestStore(t *testing.T) (*memory.Store, *goredis.Client) {
 
 	emb, err := embedding.NewLocalEmbedder(config.EmbeddingLocalConfig{
 		Model:    "sentence-transformers/all-MiniLM-L6-v2",
-		ModelDir: "~/.agentmem/models",
+		ModelDir: "~/.mnemoir/models",
 	}, 384)
 	if err != nil {
 		t.Fatalf("NewLocalEmbedder: %v", err)

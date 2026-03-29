@@ -5,15 +5,15 @@ import (
 	"math"
 	"testing"
 
-	"github.com/alle-bartoli/agentmem/internal/config"
-	"github.com/alle-bartoli/agentmem/internal/embedding"
+	"github.com/alle-bartoli/mnemoir/internal/config"
+	"github.com/alle-bartoli/mnemoir/internal/embedding"
 )
 
 func newTestLocalEmbedder(t *testing.T) *embedding.LocalEmbedder {
 	t.Helper()
 	cfg := config.EmbeddingLocalConfig{
 		Model:    "sentence-transformers/all-MiniLM-L6-v2",
-		ModelDir: "~/.agentmem/models",
+		ModelDir: "~/.mnemoir/models",
 	}
 	emb, err := embedding.NewLocalEmbedder(cfg, 384)
 	if err != nil {

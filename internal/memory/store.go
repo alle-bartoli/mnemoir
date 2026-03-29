@@ -9,8 +9,8 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/alle-bartoli/agentmem/internal/config"
-	"github.com/alle-bartoli/agentmem/internal/embedding"
+	"github.com/alle-bartoli/mnemoir/internal/config"
+	"github.com/alle-bartoli/mnemoir/internal/embedding"
 	goredis "github.com/redis/go-redis/v9"
 )
 

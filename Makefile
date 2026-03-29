@@ -1,9 +1,9 @@
 .PHONY: help build install uninstall test docker-up docker-down redis-ui setup mcp-register clean clean-data
 
-BINARY := agentmem
+BINARY := mnemoir
 BIN_DIR := bin
-CMD_DIR := ./cmd/agentmem
-CONFIG_DIR := $(HOME)/.agentmem
+CMD_DIR := ./cmd/mnemoir
+CONFIG_DIR := $(HOME)/.mnemoir
 REDIS_UI_URL := http://localhost:8001
 
 help:
@@ -35,7 +35,7 @@ uninstall:
 	rm -rf $(CONFIG_DIR)
 	@echo "Removing build artifacts..."
 	rm -rf $(BIN_DIR)
-	@echo "agentmem uninstalled."
+	@echo "mnemoir uninstalled."
 
 test:
 	go test ./...
@@ -59,8 +59,8 @@ setup: docker-up build
 	else \
 		echo "Config already exists at $(CONFIG_DIR)/config.toml"; \
 	fi
-	@if [ -z "$$AGENTMEM_REDIS_PASSWORD" ]; then \
-		echo "WARNING: AGENTMEM_REDIS_PASSWORD is not set. Set it before starting Redis."; \
+	@if [ -z "$$MNEMOIR_REDIS_PASSWORD" ]; then \
+		echo "WARNING: MNEMOIR_REDIS_PASSWORD is not set. Set it before starting Redis."; \
 	fi
 
 mcp-register: build

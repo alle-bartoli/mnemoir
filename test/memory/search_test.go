@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/alle-bartoli/agentmem/internal/memory"
+	"github.com/alle-bartoli/mnemoir/internal/memory"
 )
 
 func TestVectorSearch(t *testing.T) {

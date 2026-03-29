@@ -11,7 +11,7 @@ import (
 	"net/url"
 	"time"
 
-	"github.com/alle-bartoli/agentmem/internal/config"
+	"github.com/alle-bartoli/mnemoir/internal/config"
 )
 
 // OllamaCompressor uses the Ollama generate API for compression.

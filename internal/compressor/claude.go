@@ -11,7 +11,7 @@ import (
 	"os"
 	"time"
 
-	"github.com/alle-bartoli/agentmem/internal/config"
+	"github.com/alle-bartoli/mnemoir/internal/config"
 )
 
 // ClaudeCompressor uses the Anthropic Messages API for compression.

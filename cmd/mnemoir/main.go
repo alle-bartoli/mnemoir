@@ -11,12 +11,12 @@ import (
 	"path/filepath"
 	"syscall"
 
-	"github.com/alle-bartoli/agentmem/internal/compressor"
-	"github.com/alle-bartoli/agentmem/internal/config"
-	"github.com/alle-bartoli/agentmem/internal/embedding"
-	mcpserver "github.com/alle-bartoli/agentmem/internal/mcp"
-	"github.com/alle-bartoli/agentmem/internal/memory"
-	redisclient "github.com/alle-bartoli/agentmem/internal/redis"
+	"github.com/alle-bartoli/mnemoir/internal/compressor"
+	"github.com/alle-bartoli/mnemoir/internal/config"
+	"github.com/alle-bartoli/mnemoir/internal/embedding"
+	mcpserver "github.com/alle-bartoli/mnemoir/internal/mcp"
+	"github.com/alle-bartoli/mnemoir/internal/memory"
+	redisclient "github.com/alle-bartoli/mnemoir/internal/redis"
 	"github.com/mark3labs/mcp-go/server"
 )
 
@@ -28,7 +28,7 @@ func main() {
 	flag.Parse()
 
 	if *showVersion {
-		fmt.Println("agentmem", version)
+		fmt.Println("mnemoir", version)
 		os.Exit(0)
 	}
 
@@ -119,14 +119,14 @@ func main() {
 	slog.Info("Server stopped")
 }
 
-// initLogger sets up slog with JSON output to ~/.agentmem/agentmem.log.
+// initLogger sets up slog with JSON output to ~/.mnemoir/mnemoir.log.
 // Falls back to stderr if the log file cannot be opened.
 func initLogger() *os.File {
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return nil
 	}
-	logPath := filepath.Join(home, ".agentmem", "agentmem.log")
+	logPath := filepath.Join(home, ".mnemoir", "mnemoir.log")
 	f, err := os.OpenFile(logPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o600)
 	if err != nil {
 		return nil

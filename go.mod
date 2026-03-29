@@ -1,4 +1,4 @@
-module github.com/alle-bartoli/agentmem
+module github.com/alle-bartoli/mnemoir
 
 go 1.25.4
 

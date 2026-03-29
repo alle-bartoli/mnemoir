@@ -10,9 +10,9 @@ services:
       - ./data:/data
     environment:
       # Security: require authentication via env var
-      - REDIS_ARGS=--save 60 1 --appendonly yes --maxmemory 512mb --maxmemory-policy allkeys-lru --requirepass ${AGENTMEM_REDIS_PASSWORD:?Set AGENTMEM_REDIS_PASSWORD env var}
+      - REDIS_ARGS=--save 60 1 --appendonly yes --maxmemory 512mb --maxmemory-policy allkeys-lru --requirepass ${MNEMOIR_REDIS_PASSWORD:?Set MNEMOIR_REDIS_PASSWORD env var}
     healthcheck:
-      test: ["CMD", "redis-cli", "-a", "${AGENTMEM_REDIS_PASSWORD}", "ping"]
+      test: ["CMD", "redis-cli", "-a", "${MNEMOIR_REDIS_PASSWORD}", "ping"]
       interval: 10s
       timeout: 3s
       retries: 3

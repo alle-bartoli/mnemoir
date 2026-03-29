@@ -3,7 +3,7 @@ package config_test
 import (
 	"testing"
 
-	"github.com/alle-bartoli/agentmem/internal/config"
+	"github.com/alle-bartoli/mnemoir/internal/config"
 )
 
 func validConfig() *config.Config {

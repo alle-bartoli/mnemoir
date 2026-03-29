@@ -1,6 +1,6 @@
 [redis]
 addr = "localhost:6379"
-password = "$AGENTMEM_REDIS_PASSWORD" # set env var before starting
+password = "$MNEMOIR_REDIS_PASSWORD" # set env var before starting
 db = 0
 
 [compressor]
@@ -30,7 +30,7 @@ model = "nomic-embed-text"
 
 [embedding.local]
 model = "sentence-transformers/all-MiniLM-L6-v2"
-model_dir = "~/.agentmem/models"
+model_dir = "~/.mnemoir/models"
 # dimension auto-set to 384 when provider = "local"
 
 [memory]

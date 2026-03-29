@@ -5,7 +5,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/alle-bartoli/agentmem/internal/config"
+	"github.com/alle-bartoli/mnemoir/internal/config"
 )
 
 // ExtractedMemory is a single memory extracted by the compressor.

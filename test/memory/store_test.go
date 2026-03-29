@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/alle-bartoli/agentmem/internal/memory"
+	"github.com/alle-bartoli/mnemoir/internal/memory"
 )
 
 func TestStore(t *testing.T) {
