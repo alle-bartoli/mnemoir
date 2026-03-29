@@ -30,6 +30,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - Makefile now loads `.env` file automatically via `-include .env` + `export`, so `MNEMOIR_REDIS_PASSWORD` check no longer falsely warns when the variable is set in `.env`
+- `mcp-register` Makefile target now passes `MNEMOIR_REDIS_PASSWORD` via `-e` flag so the MCP server can authenticate with Redis
+- MCP client registration examples (Claude Code, Cursor, Windsurf) now include the `env` block for `MNEMOIR_REDIS_PASSWORD`
 
 ## [Unreleased] - 2026-03-29 (Alessandro Bartoli)
 

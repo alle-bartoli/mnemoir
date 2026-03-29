@@ -68,7 +68,11 @@ setup: docker-up build
 	fi
 
 mcp-register: build
-	claude mcp add --transport stdio $(BINARY) -- $(CURDIR)/$(BIN_DIR)/$(BINARY) --config $(CONFIG_DIR)/config.toml
+	@if [ -z "$$MNEMOIR_REDIS_PASSWORD" ]; then \
+		echo "ERROR: MNEMOIR_REDIS_PASSWORD is not set. Set it in .env or export it."; \
+		exit 1; \
+	fi
+	claude mcp add $(BINARY) -t stdio -e MNEMOIR_REDIS_PASSWORD="$$MNEMOIR_REDIS_PASSWORD" -- $(CURDIR)/$(BIN_DIR)/$(BINARY) --config $(CONFIG_DIR)/config.toml
 
 clean:
 	rm -rf $(BIN_DIR)

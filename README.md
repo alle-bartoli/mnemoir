@@ -58,7 +58,7 @@ make mcp-register
 Or manually:
 
 ```bash
-claude mcp add --transport stdio mnemoir -- /path/to/bin/mnemoir --config ~/.mnemoir/config.toml
+claude mcp add mnemoir -t stdio -e MNEMOIR_REDIS_PASSWORD="your-secret" -- /path/to/bin/mnemoir --config ~/.mnemoir/config.toml
 ```
 
 ### Cursor
@@ -70,7 +70,10 @@ Settings > MCP Servers > Add new server:
   "mcpServers": {
     "mnemoir": {
       "command": "/path/to/bin/mnemoir",
-      "args": ["--config", "~/.mnemoir/config.toml"]
+      "args": ["--config", "~/.mnemoir/config.toml"],
+      "env": {
+        "MNEMOIR_REDIS_PASSWORD": "your-secret"
+      }
     }
   }
 }
@@ -85,7 +88,10 @@ Settings > MCP > Add server:
   "mcpServers": {
     "mnemoir": {
       "command": "/path/to/bin/mnemoir",
-      "args": ["--config", "~/.mnemoir/config.toml"]
+      "args": ["--config", "~/.mnemoir/config.toml"],
+      "env": {
+        "MNEMOIR_REDIS_PASSWORD": "your-secret"
+      }
     }
   }
 }
