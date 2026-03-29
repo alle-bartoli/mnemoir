@@ -5,6 +5,24 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased] - 2026-03-29 (Alessandro Bartoli)
+
+### Added
+
+- Auto-summarize implementation: `end_session` now generates a summary from extracted memories when none is provided and `session.auto_summarize` is enabled
+- `buildAutoSummary()` helper that produces a summary with memory counts and up to 3 key points
+- Security section in `docs/architecture.md` covering input validation, injection prevention, network safety, cryptography, and concurrency
+- Search internals documented in `docs/tools-reference.md` (vector, fulltext, hybrid merge algorithm)
+- Local compressor classification rules documented in `docs/configuration.md`
+
+### Changed
+
+- `start_session` now respects `session.max_recall_items` config instead of hardcoded limit of 10
+- `end_session` checks `session.auto_summarize` config before compressing observations
+- Fixed hybrid search weights in `docs/architecture.md` (was 0.7/0.3, now correctly 0.60/0.25/0.15)
+- Go version requirement updated from 1.21+ to 1.25+ across all docs (README, setup, implementation guide)
+- Session settings comments updated in `docs/configuration.md` to reflect actual behavior
+
 ## [Unreleased] - 2026-03-28 (Alessandro Bartoli)
 
 ### Added

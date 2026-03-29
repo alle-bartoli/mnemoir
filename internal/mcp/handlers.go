@@ -258,8 +258,8 @@ func (h *Handlers) StartSession(ctx context.Context, req mcp.CallToolRequest) (*
 		previousSummary = lastSess.Summary
 	}
 
-	// Retrieve top memories by importance
-	topMemories, _ := h.store.GetTopMemories(ctx, project, 10)
+	// Retrieve top memories by importance (respects session.max_recall_items config)
+	topMemories, _ := h.store.GetTopMemories(ctx, project, h.cfg.Session.MaxRecallItems)
 	keyMemories := make([]map[string]any, 0, len(topMemories))
 	for _, m := range topMemories {
 		keyMemories = append(keyMemories, map[string]any{
@@ -296,14 +296,19 @@ func (h *Handlers) EndSession(ctx context.Context, req mcp.CallToolRequest) (*mc
 
 	memoriesCreated := 0
 
-	// Extract structured memories from observations
-	if observations != "" && h.compressor != nil {
+	// Extract structured memories from observations when auto_summarize is enabled
+	if observations != "" && h.compressor != nil && h.cfg.Session.AutoSummarize {
 		compressed, err := h.compressor.Compress(ctx, observations)
 		if err != nil {
 			log.Printf("compression failed: %v", err) // Security: log details internally
 			summary += "\n[compression failed]"           // Security: generic message in user-facing summary
 		} else {
 			memoriesCreated, _ = h.saveExtracted(ctx, compressed, sess.Project)
+
+			// Auto-generate summary from extracted memories when none provided
+			if summary == "" {
+				summary = buildAutoSummary(compressed)
+			}
 		}
 	}
 
@@ -438,6 +443,55 @@ func (h *Handlers) saveExtracted(ctx context.Context, cr *compressor.CompressRes
 	save(cr.Narratives, memory.Narrative)
 
 	return count, nil
+}
+
+// buildAutoSummary generates a session summary from extracted memories.
+func buildAutoSummary(cr *compressor.CompressResult) string {
+	total := len(cr.Facts) + len(cr.Concepts) + len(cr.Narratives)
+	if total == 0 {
+		return ""
+	}
+
+	var parts []string
+
+	if n := len(cr.Facts); n > 0 {
+		parts = append(parts, fmt.Sprintf("%d fact(s)", n))
+	}
+	if n := len(cr.Concepts); n > 0 {
+		parts = append(parts, fmt.Sprintf("%d concept(s)", n))
+	}
+	if n := len(cr.Narratives); n > 0 {
+		parts = append(parts, fmt.Sprintf("%d narrative(s)", n))
+	}
+
+	summary := fmt.Sprintf("Auto-extracted %d memories: %s.", total, strings.Join(parts, ", "))
+
+	// Append up to 3 key items as context
+	var highlights []string
+	for _, m := range cr.Facts {
+		if len(highlights) >= 3 {
+			break
+		}
+		highlights = append(highlights, m.Content)
+	}
+	for _, m := range cr.Concepts {
+		if len(highlights) >= 3 {
+			break
+		}
+		highlights = append(highlights, m.Content)
+	}
+	for _, m := range cr.Narratives {
+		if len(highlights) >= 3 {
+			break
+		}
+		highlights = append(highlights, m.Content)
+	}
+
+	if len(highlights) > 0 {
+		summary += " Key points: " + strings.Join(highlights, "; ")
+	}
+
+	return summary
 }
 
 // Security: use crypto/rand instead of math/rand for unpredictable IDs

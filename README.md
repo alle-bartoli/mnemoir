@@ -27,12 +27,12 @@ The stack: Go binary over stdio (JSON-RPC), Redis Stack (Hashes + RediSearch), e
 - **MCP-native**: 8 tools via Model Context Protocol over stdio
 - **Triple embedding**: OpenAI (`text-embedding-3-small`, 1536d), Ollama (`nomic-embed-text`, 768d), local ONNX (`all-MiniLM-L6-v2`, 384d)
 - **Flexible compression**: Claude API, Ollama, or local rule-based extraction
-- **Session management**: start/end sessions with automatic summarization
+- **Session management**: start/end sessions with automatic summarization from extracted memories
 - **Multi-project**: scoped memories per project with cross-project recall
 
 ## Prerequisites
 
-- Go 1.21 or higher
+- Go 1.25 or higher
 - Docker and Docker Compose
 - Redis Stack 7.2+ (provided via `docker-compose.yml`)
 - Environment variables:
@@ -194,15 +194,18 @@ Directory structure:
 ```
 agentmem/
 ├── cmd/agentmem/        # Entry point, CLI flags
-├── internal/
-│   ├── compressor/      # AI-powered memory extraction
+├���─ internal/
+│   ├── compressor/      # Memory extraction (Claude API, Ollama, local rules)
 │   ├── config/          # TOML configuration loading
-│   ├── embedding/       # Vector generation (OpenAI/Ollama)
+│   ├── embedding/       # Vector generation (OpenAI, Ollama, local ONNX)
 │   ├── mcp/             # MCP server + tool handlers
-│   ├── memory/          # Core types, CRUD, search
+│   ├── memory/          # Core types, CRUD, search, spaced repetition
 │   └── redis/           # Connection pool, index management
+├── test/
+│   ├── embedding/       # Black-box tests for embedding layer
+│   └── memory/          # Black-box tests for store and search
 ├── config/              # Default config template
-└── docs/                # Architecture, tools reference, setup
+└── docs/                # Architecture, tools reference, setup, configuration
 ```
 
 ## Development
