@@ -63,8 +63,19 @@ func (s *Store) RunMaintenance(ctx context.Context, project string, maintCfg con
 	}
 	result.OrphanCleaned = cleaned
 
-	// Mark maintenance as done with TTL
-	s.rdb.Set(ctx, runKey, time.Now().Unix(), minInterval)
+	// Mark maintenance as done with TTL and stats
+	now := time.Now()
+	pipe := s.rdb.Pipeline()
+	pipe.HSet(ctx, runKey, map[string]any{
+		"timestamp":       now.Unix(),
+		"forgotten_count": result.ForgottenCount,
+		"pruned_sessions": result.PrunedSessions,
+		"orphan_cleaned":  result.OrphanCleaned,
+	})
+	pipe.Expire(ctx, runKey, minInterval)
+	if _, err := pipe.Exec(ctx); err != nil {
+		slog.Error("failed to record maintenance run", "project", project, "error", err)
+	}
 
 	return result, nil
 }

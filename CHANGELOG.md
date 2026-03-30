@@ -19,6 +19,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `make instructions` target: installs agent instructions into global `CLAUDE.md`
 - `StartHealthServer` now accepts variadic `extraRoutes` to register additional HTTP handlers alongside `/healthz`
 - `NewServer` returns `*Handlers` alongside `*server.MCPServer` for sideband HTTP wiring
+- `maint:last_run:{project}` now stores a Redis hash with `timestamp`, `forgotten_count`, `pruned_sessions`, `orphan_cleaned` instead of a plain timestamp
+- `TestMaintenance/LastRunStats` integration test: verifies hash type, all fields present, non-zero timestamp, and positive TTL
 - `make mcp-register-global` target: registers MCP server with `-s user` scope so it is available in all Claude Code projects
 - Explicit `-s local` flag on existing `mcp-register` target for clarity
 

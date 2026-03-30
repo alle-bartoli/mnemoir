@@ -208,6 +208,49 @@ func TestMaintenance(t *testing.T) {
 		}
 	})
 
+	t.Run("LastRunStats", func(t *testing.T) {
+		rdb.Del(ctx, "maint:last_run:"+maintProject)
+
+		_, err := store.RunMaintenance(ctx, maintProject, defaultMaintCfg, defaultMemCfg)
+		if err != nil {
+			t.Fatalf("RunMaintenance: %v", err)
+		}
+
+		// Verify last_run is a hash with expected fields
+		runKey := "maint:last_run:" + maintProject
+		keyType, err := rdb.Type(ctx, runKey).Result()
+		if err != nil {
+			t.Fatalf("TYPE: %v", err)
+		}
+		if keyType != "hash" {
+			t.Fatalf("expected hash, got %s", keyType)
+		}
+
+		fields, err := rdb.HGetAll(ctx, runKey).Result()
+		if err != nil {
+			t.Fatalf("HGETALL: %v", err)
+		}
+
+		for _, field := range []string{"timestamp", "forgotten_count", "pruned_sessions", "orphan_cleaned"} {
+			if _, ok := fields[field]; !ok {
+				t.Errorf("missing field %q in last_run hash", field)
+			}
+		}
+
+		if fields["timestamp"] == "" || fields["timestamp"] == "0" {
+			t.Error("timestamp should be a non-zero value")
+		}
+
+		// Verify TTL is set
+		ttl, err := rdb.TTL(ctx, runKey).Result()
+		if err != nil {
+			t.Fatalf("TTL: %v", err)
+		}
+		if ttl <= 0 {
+			t.Errorf("expected positive TTL, got %v", ttl)
+		}
+	})
+
 	t.Run("SkipWhenRecent", func(t *testing.T) {
 		// First run sets the throttle key
 		rdb.Del(ctx, "maint:last_run:"+maintProject)
