@@ -49,7 +49,7 @@ auto_summarize = true
 max_recall_items = 20
 
 [server]
-health_addr = "" # e.g. ":9090" to enable /healthz endpoint, empty to disable
+health_addr = ":9090" # sideband HTTP: /healthz + /end-session hook, empty to disable
 
 [maintenance]
 enabled = true

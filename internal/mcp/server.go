@@ -11,10 +11,11 @@ import (
 )
 
 // NewServer creates an MCP server with all tools registered.
-func NewServer(store *memory.Store, comp compressor.ICompressor, cfg *config.Config, rdb *redis.Client) *server.MCPServer {
+// Returns both the MCP server and the Handlers for sideband HTTP endpoints.
+func NewServer(store *memory.Store, comp compressor.ICompressor, cfg *config.Config, rdb *redis.Client) (*server.MCPServer, *Handlers) {
 	s := server.NewMCPServer(
 		"mnemoir",
-		"1.0.0",
+		"0.0.0",
 		server.WithToolCapabilities(true),
 	)
 
@@ -26,7 +27,7 @@ func NewServer(store *memory.Store, comp compressor.ICompressor, cfg *config.Con
 	}
 
 	registerTools(s, h)
-	return s
+	return s, h
 }
 
 func registerTools(s *server.MCPServer, h *Handlers) {

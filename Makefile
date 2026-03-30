@@ -1,4 +1,4 @@
-.PHONY: help build install uninstall test docker-up docker-down redis-ui setup mcp mcp-global clean clean-data
+.PHONY: help build install uninstall test docker-up docker-down redis-ui setup mcp mcp-global hook instructions clean clean-data
 
 # Load .env if present so env-var checks work without manual export
 -include .env
@@ -19,9 +19,11 @@ help:
 	@echo "  make docker-up     - Start Redis Stack (Redis + RedisInsight)"
 	@echo "  make docker-down   - Stop Redis Stack"
 	@echo "  make redis-ui      - Open RedisInsight web UI (http://localhost:8001)"
-	@echo "  make setup         - Full setup (docker + build + config)"
+	@echo "  make setup         - Full install (docker + build + config + MCP + hook)"
 	@echo "  make mcp           - Register MCP server with Claude Code (project-local)"
 	@echo "  make mcp-global    - Register MCP server globally (all projects)"
+	@echo "  make hook          - Install Claude Code SessionEnd hook"
+	@echo "  make instructions  - Install agent instructions into ~/.claude/CLAUDE.md"
 	@echo "  make clean         - Remove build artifacts"
 	@echo "  make clean-data    - Stop Redis and wipe all stored memories (data/)"
 
@@ -36,6 +38,10 @@ uninstall:
 	rm -f $(shell go env GOPATH)/bin/$(BINARY)
 	@echo "Removing MCP registration..."
 	-claude mcp remove $(BINARY) 2>/dev/null
+	@echo "Removing SessionEnd hook..."
+	-$(CURDIR)/scripts/uninstall-hook.sh 2>/dev/null
+	@echo "Removing agent instructions from CLAUDE.md..."
+	-$(CURDIR)/scripts/uninstall-instructions.sh 2>/dev/null
 	@echo "Removing config directory $(CONFIG_DIR)..."
 	rm -rf $(CONFIG_DIR)
 	@echo "Removing build artifacts..."
@@ -67,6 +73,23 @@ setup: docker-up build
 	@if [ -z "$$MNEMOIR_REDIS_PASSWORD" ]; then \
 		echo "WARNING: MNEMOIR_REDIS_PASSWORD is not set. Set it before starting Redis."; \
 	fi
+	@echo ""
+	@echo "Registering MCP server (global)..."
+	@$(MAKE) --no-print-directory mcp-global
+	@echo ""
+	@echo "Installing SessionEnd hook..."
+	@$(MAKE) --no-print-directory hook
+	@echo ""
+	@echo "Installing agent instructions..."
+	@$(MAKE) --no-print-directory instructions
+	@echo ""
+	@echo "Setup complete. Edit $(CONFIG_DIR)/config.toml to customize."
+
+hook:
+	@$(CURDIR)/scripts/install-hook.sh $(CURDIR)/scripts/session-end-hook.sh
+
+instructions:
+	@$(CURDIR)/scripts/install-instructions.sh $(CURDIR)/docs/agent-instructions.md
 
 mcp: build
 	@if [ -z "$$MNEMOIR_REDIS_PASSWORD" ]; then \

@@ -9,11 +9,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `POST /end-session` HTTP endpoint on sideband server: accepts `{"observations": "...", "summary": "..."}`, delegates to existing `EndSession` handler, returns 404 if no active session
+- `scripts/session-end-hook.sh`: Claude Code `SessionEnd` hook script that calls `/end-session` via curl for graceful session closure on `ctrl+c`
+- `scripts/install-hook.sh`: idempotent installer that merges `SessionEnd` hook into `~/.claude/settings.json` via `jq`
+- `scripts/uninstall-hook.sh`: removes the mnemoir hook entry from Claude Code settings
+- `scripts/install-instructions.sh`: installs agent instructions into `~/.claude/CLAUDE.md`, replacing existing section or appending
+- `scripts/uninstall-instructions.sh`: removes the mnemoir section from `~/.claude/CLAUDE.md`
+- `make hook` target: installs the Claude Code `SessionEnd` hook
+- `make instructions` target: installs agent instructions into global `CLAUDE.md`
+- `StartHealthServer` now accepts variadic `extraRoutes` to register additional HTTP handlers alongside `/healthz`
+- `NewServer` returns `*Handlers` alongside `*server.MCPServer` for sideband HTTP wiring
 - `make mcp-register-global` target: registers MCP server with `-s user` scope so it is available in all Claude Code projects
 - Explicit `-s local` flag on existing `mcp-register` target for clarity
 
 ### Changed
 
+- Default `server.health_addr` changed from `""` (disabled) to `":9090"` (enabled) so the sideband HTTP server and session hook work out of the box
+- `make setup` is now a full installation: docker + build + config + MCP global registration + SessionEnd hook + agent instructions in `~/.claude/CLAUDE.md`
+- `make uninstall` now also removes the SessionEnd hook from Claude Code settings
 - Renamed `mcp-register` to `mcp` and `mcp-register-global` to `mcp-global` for shorter CLI usage
 - Rewrote `docs/agent-instructions.md` with comprehensive tool documentation: parameter tables for all 8 tools, search mode tradeoffs, `forget`/`update_memory` workflows, dedicated `end_session` section, utility tools, and continuous usage pattern
 - README updated with both registration scopes (project-local vs global) in Quick Start, Claude Code section, and Development commands

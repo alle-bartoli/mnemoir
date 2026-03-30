@@ -29,13 +29,11 @@ Fully offline-capable, no API keys required.
 # Set Redis password
 export MNEMOIR_REDIS_PASSWORD="your-secret"
 
-# Start Redis Stack and build binary
+# Full install: docker + build + config + MCP registration + SessionEnd hook
 make setup
-
-# Register with your MCP client (see below)
-make mcp            # Claude Code (project-local)
-make mcp-global     # Claude Code (all projects)
 ```
+
+This runs everything: starts Redis, builds the binary, copies config to `~/.mnemoir/config.toml`, registers the MCP server globally with Claude Code, installs the `SessionEnd` hook for graceful session closure, and adds agent instructions to `~/.claude/CLAUDE.md`.
 
 Edit `~/.mnemoir/config.toml` to customize providers and behavior.
 
@@ -173,6 +171,7 @@ Default configuration copied to `~/.mnemoir/config.toml` on first setup.
 | `memory.access_boost_factor` | `0.3`   | Points gained per recall                      |
 | `memory.access_boost_cap`    | `2.0`   | Max boost from recalls                        |
 | `session.max_recall_items`   | `20`    | Limit recalled memories per session           |
+| `server.health_addr`         | `:9090` | Sideband HTTP address (`/healthz`, `/end-session`), empty to disable |
 
 ## MCP Tools
 
@@ -280,6 +279,7 @@ mnemoir/
 ├── test/
 │   ├── embedding/       # Black-box tests for embedding layer
 │   └── memory/          # Black-box tests for store and search
+├── scripts/             # Hook scripts (Claude Code SessionEnd)
 ├── config/              # Default config template
 └── docs/                # Architecture, tools reference, setup, configuration
 ```
@@ -288,6 +288,7 @@ mnemoir/
 
 ```bash
 make help                # Show all available commands
+make setup               # Full install (docker + build + config + MCP + hook)
 make build               # Build binary
 make test                # Run tests
 make docker-up           # Start Redis Stack
@@ -295,10 +296,12 @@ make docker-down         # Stop Redis Stack
 make redis-ui            # Open RedisInsight web UI (http://localhost:8001)
 make mcp                 # Register MCP server (project-local)
 make mcp-global          # Register MCP server (all projects)
+make hook                # Install Claude Code SessionEnd hook
+make instructions        # Install agent instructions into ~/.claude/CLAUDE.md
 make clean               # Clean build artifacts
 make clean-data          # Stop Redis and wipe all stored memories (data/)
 make install             # Install to $GOPATH/bin
-make uninstall           # Remove binary, MCP registration, and config
+make uninstall           # Remove binary, MCP registration, config, hook, and instructions
 ```
 
 Redis data (RDB snapshots + AOF log) is persisted locally in `./data/`.
@@ -347,9 +350,51 @@ FT.AGGREGATE idx:memories "*" GROUPBY 1 @project REDUCE COUNT 0 AS count
 4. Set breakpoint: `<leader>db`
 5. Start debugger: `<leader>dc` then select "Debug Package"
 
+## Session Hook (Claude Code)
+
+When a Claude Code session ends (including `ctrl+c`), the agent has no chance to call `end_session`. The included hook script solves this by calling the `/end-session` HTTP endpoint automatically.
+
+### Setup
+
+The hook is installed automatically by `make setup`. To install it separately:
+
+```bash
+make hook
+```
+
+This merges the `SessionEnd` hook into `~/.claude/settings.json` without overwriting existing settings. Idempotent (safe to run multiple times). Requires `jq`.
+
+The hook sends a `POST` to `http://localhost:9090/end-session` with the exit reason as observation. Override the port with `MNEMOIR_HEALTH_PORT` env var if needed. Ensure `server.health_addr` is set in `~/.mnemoir/config.toml` (default: `":9090"`).
+
+### HTTP Sideband Endpoints
+
+When `server.health_addr` is configured, mnemoir exposes:
+
+| Endpoint            | Method | Description                                    |
+| ------------------- | ------ | ---------------------------------------------- |
+| `/healthz`          | GET    | Redis connectivity check (200/503)             |
+| `/end-session`      | POST   | Gracefully close active session via JSON body  |
+
+`/end-session` accepts:
+
+```json
+{
+  "observations": "what happened in the session",
+  "summary": "optional override"
+}
+```
+
+Returns 200 on success, 404 if no active session, 400 on invalid input.
+
 ## Agent Instructions
 
-See [docs/agent-instructions.md](docs/agent-instructions.md) for a ready-to-copy prompt block to paste into your project's `CLAUDE.md` (or equivalent system prompt for other agents).
+`make setup` automatically installs agent instructions into `~/.claude/CLAUDE.md`. To install or update them separately:
+
+```bash
+make instructions
+```
+
+See [docs/agent-instructions.md](docs/agent-instructions.md) for the full prompt block. You can also copy it manually into a project-level `CLAUDE.md` or equivalent system prompt for other agents.
 
 ## TODO
 

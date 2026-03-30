@@ -56,8 +56,9 @@ func (c *Client) RDB() *redis.Client {
 }
 
 // StartHealthServer starts a sideband HTTP server on the given address (e.g. ":9090")
-// exposing /healthz for readiness probes. Returns the listener for shutdown.
-func (c *Client) StartHealthServer(addr string) (net.Listener, error) {
+// exposing /healthz for readiness probes. Extra routes can be registered via extraRoutes.
+// Returns the listener for shutdown.
+func (c *Client) StartHealthServer(addr string, extraRoutes ...func(*http.ServeMux)) (net.Listener, error) {
 	if addr == "" {
 		return nil, nil // disabled
 	}
@@ -79,6 +80,10 @@ func (c *Client) StartHealthServer(addr string) (net.Listener, error) {
 		w.WriteHeader(code)
 		json.NewEncoder(w).Encode(map[string]string{"status": status})
 	})
+
+	for _, register := range extraRoutes {
+		register(mux)
+	}
 
 	ln, err := net.Listen("tcp", addr)
 	if err != nil {

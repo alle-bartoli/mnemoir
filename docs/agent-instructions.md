@@ -112,6 +112,8 @@ end_session(observations: "Renamed Makefile targets mcp-register -> mcp,
   and CHANGELOG. User prefers short target names over verbose ones.")
 ```
 
+**Fallback**: If the user kills the session (`ctrl+c`) before you can call `end_session`, the Claude Code `SessionEnd` hook calls the `/end-session` HTTP endpoint automatically with a minimal observation. This is a safety net, not a replacement. Always call `end_session` yourself when possible, since your observations are far richer than the hook's generic message.
+
 ### Utility tools
 
 | Tool            | When to use                                                                                   |

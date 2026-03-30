@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"net/http"
 	"strings"
 	"sync"
 	"time"
@@ -615,4 +616,76 @@ func jsonResult(data any) (*mcp.CallToolResult, error) {
 		return nil, fmt.Errorf("marshal result: %w", err)
 	}
 	return mcp.NewToolResultText(string(b)), nil
+}
+
+// HandleEndSession is an HTTP handler for POST /end-session.
+// Called by Claude Code SessionEnd hook to gracefully close the active session.
+func (h *Handlers) HandleEndSession(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+
+	// Decode request body
+	var body struct {
+		Observations string `json:"observations"`
+		Summary      string `json:"summary"`
+	}
+	if r.Body != nil {
+		defer r.Body.Close()
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			w.WriteHeader(http.StatusBadRequest)
+			json.NewEncoder(w).Encode(map[string]string{"error": "invalid JSON body"})
+			return
+		}
+	}
+
+	// Validate lengths
+	if err := validateLength("observations", body.Observations, maxContentLen); err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
+		return
+	}
+	if err := validateLength("summary", body.Summary, maxContentLen); err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
+		return
+	}
+
+	// Check active session before calling EndSession
+	h.mu.Lock()
+	hasSession := h.activeSession != nil
+	h.mu.Unlock()
+
+	if !hasSession {
+		w.WriteHeader(http.StatusNotFound)
+		json.NewEncoder(w).Encode(map[string]string{"error": "no active session"})
+		return
+	}
+
+	// Build synthetic MCP request with arguments
+	req := mcp.CallToolRequest{}
+	req.Params.Arguments = map[string]any{
+		"observations": body.Observations,
+		"summary":      body.Summary,
+	}
+
+	result, err := h.EndSession(r.Context(), req)
+	if err != nil {
+		slog.Error("end-session via HTTP failed", "error", err)
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(map[string]string{"error": "internal error"})
+		return
+	}
+
+	// Check if EndSession returned an MCP error result
+	if result.IsError {
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(map[string]string{"error": "session end failed"})
+		return
+	}
+
+	slog.Info("Session ended via HTTP hook")
+	w.WriteHeader(http.StatusOK)
+	// Result content is already JSON from jsonResult
+	if len(result.Content) > 0 {
+		fmt.Fprint(w, result.Content[0].(mcp.TextContent).Text)
+	}
 }

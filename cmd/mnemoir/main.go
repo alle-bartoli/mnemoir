@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"log/slog"
+	"net/http"
 	"os"
 	"os/signal"
 	"path/filepath"
@@ -85,15 +86,17 @@ func main() {
 	// Initialize memory store
 	store := memory.NewStore(rc.RDB(), emb, cfg.Memory)
 
-	// Start health endpoint (optional sideband HTTP)
-	if ln, err := rc.StartHealthServer(cfg.Server.HealthAddr); err != nil {
-		slog.Warn("Health endpoint disabled", "error", err)
+	// Create and start MCP server
+	s, handlers := mcpserver.NewServer(store, comp, cfg, rc.RDB())
+
+	// Start sideband HTTP (health + end-session hook)
+	if ln, err := rc.StartHealthServer(cfg.Server.HealthAddr, func(mux *http.ServeMux) {
+		mux.HandleFunc("POST /end-session", handlers.HandleEndSession)
+	}); err != nil {
+		slog.Warn("Sideband HTTP disabled", "error", err)
 	} else if ln != nil {
 		defer ln.Close()
 	}
-
-	// Create and start MCP server
-	s := mcpserver.NewServer(store, comp, cfg, rc.RDB())
 
 	// Graceful shutdown: cancel context and let ServeStdio return naturally.
 	// Avoids os.Exit which would bypass defers (embedder close, Redis close).
