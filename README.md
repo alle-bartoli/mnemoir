@@ -33,7 +33,8 @@ export MNEMOIR_REDIS_PASSWORD="your-secret"
 make setup
 
 # Register with your MCP client (see below)
-make mcp-register   # Claude Code
+make mcp            # Claude Code (project-local)
+make mcp-global     # Claude Code (all projects)
 ```
 
 Edit `~/.mnemoir/config.toml` to customize providers and behavior.
@@ -52,13 +53,21 @@ Mnemoir works with any MCP-compatible coding agent via stdio transport.
 ### Claude Code
 
 ```bash
-make mcp-register
+# Project-local (only available in current project)
+make mcp
+
+# Global (available in all projects)
+make mcp-global
 ```
 
 Or manually:
 
 ```bash
-claude mcp add mnemoir -t stdio -e MNEMOIR_REDIS_PASSWORD="your-secret" -- /path/to/bin/mnemoir --config ~/.mnemoir/config.toml
+# Project-local (default)
+claude mcp add mnemoir -s local -t stdio -e MNEMOIR_REDIS_PASSWORD="your-secret" -- /path/to/bin/mnemoir --config ~/.mnemoir/config.toml
+
+# Global (user-wide)
+claude mcp add mnemoir -s user -t stdio -e MNEMOIR_REDIS_PASSWORD="your-secret" -- /path/to/bin/mnemoir --config ~/.mnemoir/config.toml
 ```
 
 ### Cursor
@@ -278,16 +287,18 @@ mnemoir/
 ## Development
 
 ```bash
-make help         # Show all available commands
-make build        # Build binary
-make test         # Run tests
-make docker-up    # Start Redis Stack
-make docker-down  # Stop Redis Stack
-make redis-ui     # Open RedisInsight web UI (http://localhost:8001)
-make clean        # Clean build artifacts
-make clean-data   # Stop Redis and wipe all stored memories (data/)
-make install      # Install to $GOPATH/bin
-make uninstall    # Remove binary, MCP registration, and config
+make help                # Show all available commands
+make build               # Build binary
+make test                # Run tests
+make docker-up           # Start Redis Stack
+make docker-down         # Stop Redis Stack
+make redis-ui            # Open RedisInsight web UI (http://localhost:8001)
+make mcp                 # Register MCP server (project-local)
+make mcp-global          # Register MCP server (all projects)
+make clean               # Clean build artifacts
+make clean-data          # Stop Redis and wipe all stored memories (data/)
+make install             # Install to $GOPATH/bin
+make uninstall           # Remove binary, MCP registration, and config
 ```
 
 Redis data (RDB snapshots + AOF log) is persisted locally in `./data/`.

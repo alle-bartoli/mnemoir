@@ -5,6 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased] - 2026-03-30 (Alessandro Bartoli)
+
+### Added
+
+- `make mcp-register-global` target: registers MCP server with `-s user` scope so it is available in all Claude Code projects
+- Explicit `-s local` flag on existing `mcp-register` target for clarity
+
+### Changed
+
+- Renamed `mcp-register` to `mcp` and `mcp-register-global` to `mcp-global` for shorter CLI usage
+- README updated with both registration scopes (project-local vs global) in Quick Start, Claude Code section, and Development commands
+
 ## [Unreleased] - 2026-03-29 (Alessandro Bartoli)
 
 ### Added

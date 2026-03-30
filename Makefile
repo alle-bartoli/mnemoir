@@ -1,4 +1,4 @@
-.PHONY: help build install uninstall test docker-up docker-down redis-ui setup mcp-register clean clean-data
+.PHONY: help build install uninstall test docker-up docker-down redis-ui setup mcp mcp-global clean clean-data
 
 # Load .env if present so env-var checks work without manual export
 -include .env
@@ -20,7 +20,8 @@ help:
 	@echo "  make docker-down   - Stop Redis Stack"
 	@echo "  make redis-ui      - Open RedisInsight web UI (http://localhost:8001)"
 	@echo "  make setup         - Full setup (docker + build + config)"
-	@echo "  make mcp-register  - Register MCP server with Claude Code"
+	@echo "  make mcp           - Register MCP server with Claude Code (project-local)"
+	@echo "  make mcp-global    - Register MCP server globally (all projects)"
 	@echo "  make clean         - Remove build artifacts"
 	@echo "  make clean-data    - Stop Redis and wipe all stored memories (data/)"
 
@@ -67,12 +68,19 @@ setup: docker-up build
 		echo "WARNING: MNEMOIR_REDIS_PASSWORD is not set. Set it before starting Redis."; \
 	fi
 
-mcp-register: build
+mcp: build
 	@if [ -z "$$MNEMOIR_REDIS_PASSWORD" ]; then \
 		echo "ERROR: MNEMOIR_REDIS_PASSWORD is not set. Set it in .env or export it."; \
 		exit 1; \
 	fi
-	claude mcp add $(BINARY) -t stdio -e MNEMOIR_REDIS_PASSWORD="$$MNEMOIR_REDIS_PASSWORD" -- $(CURDIR)/$(BIN_DIR)/$(BINARY) --config $(CONFIG_DIR)/config.toml
+	claude mcp add $(BINARY) -s local -t stdio -e MNEMOIR_REDIS_PASSWORD="$$MNEMOIR_REDIS_PASSWORD" -- $(CURDIR)/$(BIN_DIR)/$(BINARY) --config $(CONFIG_DIR)/config.toml
+
+mcp-global: build
+	@if [ -z "$$MNEMOIR_REDIS_PASSWORD" ]; then \
+		echo "ERROR: MNEMOIR_REDIS_PASSWORD is not set. Set it in .env or export it."; \
+		exit 1; \
+	fi
+	claude mcp add $(BINARY) -s user -t stdio -e MNEMOIR_REDIS_PASSWORD="$$MNEMOIR_REDIS_PASSWORD" -- $(CURDIR)/$(BIN_DIR)/$(BINARY) --config $(CONFIG_DIR)/config.toml
 
 clean:
 	rm -rf $(BIN_DIR)
