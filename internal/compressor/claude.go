@@ -23,14 +23,14 @@ type ClaudeCompressor struct {
 
 // NewClaudeCompressor creates an Anthropic-backed compressor.
 func NewClaudeCompressor(cfg config.CompressorClaudeConfig) (*ClaudeCompressor, error) {
-	apiKey := os.Getenv("ANTHROPIC_API_KEY")
+	apiKey := os.Getenv(config.EnvAnthropicAPIKey)
 	if apiKey == "" {
-		return nil, fmt.Errorf("ANTHROPIC_API_KEY environment variable not set")
+		return nil, fmt.Errorf("%s environment variable not set", config.EnvAnthropicAPIKey)
 	}
 
 	model := cfg.Model
 	if model == "" {
-		model = "claude-haiku-4-5-20251001"
+		model = config.DefaultClaudeModel
 	}
 
 	return &ClaudeCompressor{

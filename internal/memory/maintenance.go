@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/alle-bartoli/mnemoir/internal/config"
+	"github.com/alle-bartoli/mnemoir/internal/redis"
 	goredis "github.com/redis/go-redis/v9"
 )
 
@@ -28,7 +29,7 @@ func (s *Store) RunMaintenance(ctx context.Context, project string, maintCfg con
 	}
 
 	// Throttle: skip if maintenance ran recently for this project
-	runKey := "maint:last_run:" + project
+	runKey := redis.KeyPrefixMaintLastRun + project
 	minInterval, _ := maintCfg.ParsedMinRunInterval()
 
 	exists, err := s.rdb.Exists(ctx, runKey).Result()
@@ -120,7 +121,7 @@ func (s *Store) autoForget(ctx context.Context, project string, maintCfg config.
 	const maxIterations = 50
 
 	for iteration := 0; iteration < maxIterations; iteration++ {
-		args := []any{"FT.SEARCH", "idx:memories", query, "NOCONTENT", "LIMIT", 0, batchSize}
+		args := []any{"FT.SEARCH", redis.IndexName, query, "NOCONTENT", "LIMIT", 0, batchSize}
 		res, err := s.rdb.Do(ctx, args...).Result()
 		if err != nil {
 			return totalDeleted, fmt.Errorf("search for auto-forget: %w", err)
@@ -157,7 +158,7 @@ func (s *Store) autoForget(ctx context.Context, project string, maintCfg config.
 // @dev pruneSessions keeps only the N most recent sessions for a project.
 // Deletes older session hashes and removes their sorted set entries.
 func (s *Store) pruneSessions(ctx context.Context, project string, maxSessions int) (int, error) {
-	setKey := "project_sessions:" + project
+	setKey := redis.KeyPrefixProjectSessions + project
 
 	count, err := s.rdb.ZCard(ctx, setKey).Result()
 	if err != nil {
@@ -180,7 +181,7 @@ func (s *Store) pruneSessions(ctx context.Context, project string, maxSessions i
 	// Delete session hashes and remove sorted set entries
 	pipe := s.rdb.Pipeline()
 	for _, id := range oldIDs {
-		pipe.Del(ctx, "session:"+id)
+		pipe.Del(ctx, redis.KeyPrefixSession+id)
 	}
 	pipe.ZRemRangeByRank(ctx, setKey, 0, int64(pruneCount-1))
 	if _, err := pipe.Exec(ctx); err != nil {
@@ -197,7 +198,7 @@ func (s *Store) cleanupOrphans(ctx context.Context, project string) (bool, error
 	cleaned := false
 
 	// 1. Clean stale sorted set entries
-	setKey := "project_sessions:" + project
+	setKey := redis.KeyPrefixProjectSessions + project
 	members, err := s.rdb.ZRange(ctx, setKey, 0, -1).Result()
 	if err != nil {
 		return false, fmt.Errorf("zrange orphans: %w", err)
@@ -208,7 +209,7 @@ func (s *Store) cleanupOrphans(ctx context.Context, project string) (bool, error
 		pipe := s.rdb.Pipeline()
 		existsCmds := make([]*goredis.IntCmd, len(members))
 		for i, id := range members {
-			existsCmds[i] = pipe.Exists(ctx, "session:"+id)
+			existsCmds[i] = pipe.Exists(ctx, redis.KeyPrefixSession+id)
 		}
 		if _, err := pipe.Exec(ctx); err != nil {
 			return false, fmt.Errorf("check session existence: %w", err)
@@ -235,7 +236,7 @@ func (s *Store) cleanupOrphans(ctx context.Context, project string) (bool, error
 		return cleaned, fmt.Errorf("count for orphan check: %w", err)
 	}
 	if memCount == 0 {
-		if err := s.rdb.SRem(ctx, "projects", project).Err(); err != nil {
+		if err := s.rdb.SRem(ctx, redis.KeyProjects, project).Err(); err != nil {
 			return cleaned, fmt.Errorf("srem orphan project: %w", err)
 		}
 		slog.Info("removed empty project", "project", project)

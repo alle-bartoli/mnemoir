@@ -37,7 +37,7 @@ func NewLocalEmbedder(cfg config.EmbeddingLocalConfig, dimension int) (*LocalEmb
 
 	model := cfg.Model
 	if model == "" {
-		model = "sentence-transformers/all-MiniLM-L6-v2"
+		model = config.DefaultLocalEmbeddingModel
 	}
 
 	dlOpts := hugot.NewDownloadOptions()

@@ -26,12 +26,12 @@ type OllamaEmbedder struct {
 func NewOllamaEmbedder(cfg config.EmbeddingOllamaConfig, dimension int) (*OllamaEmbedder, error) {
 	url := cfg.URL
 	if url == "" {
-		url = "http://localhost:11434"
+		url = config.DefaultOllamaURL
 	}
 
 	model := cfg.Model
 	if model == "" {
-		model = "nomic-embed-text"
+		model = config.DefaultOllamaEmbeddingModel
 	}
 
 	// Security: prevent SSRF by restricting to localhost

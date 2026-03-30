@@ -12,6 +12,7 @@ import (
 
 	"github.com/alle-bartoli/mnemoir/internal/config"
 	"github.com/alle-bartoli/mnemoir/internal/embedding"
+	"github.com/alle-bartoli/mnemoir/internal/redis"
 	goredis "github.com/redis/go-redis/v9"
 )
 
@@ -47,7 +48,7 @@ func (s *Store) Save(ctx context.Context, mem *Memory) error {
 	}
 	mem.Embedding = emb
 
-	key := "mem:" + mem.ID
+	key := redis.KeyPrefixMemory + mem.ID
 	fields := map[string]any{
 		"content":       mem.Content,
 		"type":          string(mem.Type),
@@ -63,7 +64,7 @@ func (s *Store) Save(ctx context.Context, mem *Memory) error {
 
 	pipe := s.rdb.Pipeline()
 	pipe.HSet(ctx, key, fields)
-	pipe.SAdd(ctx, "projects", mem.Project)
+	pipe.SAdd(ctx, redis.KeyProjects, mem.Project)
 	_, err = pipe.Exec(ctx)
 	if err != nil {
 		return fmt.Errorf("save memory %s: %w", mem.ID, err)
@@ -74,7 +75,7 @@ func (s *Store) Save(ctx context.Context, mem *Memory) error {
 
 // Get retrieves a memory by ID.
 func (s *Store) Get(ctx context.Context, id string) (*Memory, error) {
-	key := "mem:" + id
+	key := redis.KeyPrefixMemory + id
 	vals, err := s.rdb.HGetAll(ctx, key).Result()
 	if err != nil {
 		return nil, fmt.Errorf("get memory %s: %w", id, err)
@@ -88,7 +89,7 @@ func (s *Store) Get(ctx context.Context, id string) (*Memory, error) {
 
 // Delete removes a single memory by ID.
 func (s *Store) Delete(ctx context.Context, id string) error {
-	key := "mem:" + id
+	key := redis.KeyPrefixMemory + id
 	deleted, err := s.rdb.Del(ctx, key).Result()
 	if err != nil {
 		return fmt.Errorf("delete memory %s: %w", id, err)
@@ -107,7 +108,7 @@ func (s *Store) DeleteByFilter(ctx context.Context, project string, olderThan ti
 
 	const maxIterations = 100 // Safety: prevent infinite loop if index is stale
 	for iteration := 0; iteration < maxIterations; iteration++ {
-		args := []any{"FT.SEARCH", "idx:memories", query, "NOCONTENT", "LIMIT", 0, 1000}
+		args := []any{"FT.SEARCH", redis.IndexName, query, "NOCONTENT", "LIMIT", 0, 1000}
 		res, err := s.rdb.Do(ctx, args...).Result()
 		if err != nil {
 			return totalDeleted, fmt.Errorf("search for deletion: %w", err)
@@ -185,7 +186,7 @@ return new_importance
 // recalculates importance using spaced repetition. Uses a Lua script to prevent
 // read-modify-write races between concurrent search requests.
 func (s *Store) UpdateAccess(ctx context.Context, id string) error {
-	key := "mem:" + id
+	key := redis.KeyPrefixMemory + id
 	decayInterval, _ := s.memCfg.ParsedDecayInterval()
 
 	_, err := updateAccessScript.Run(ctx, s.rdb, []string{key},
@@ -203,7 +204,7 @@ func (s *Store) UpdateAccess(ctx context.Context, id string) error {
 
 // Update modifies specific fields of a memory. Recalculates embedding if content changes.
 func (s *Store) Update(ctx context.Context, id string, fields map[string]any) error {
-	key := "mem:" + id
+	key := redis.KeyPrefixMemory + id
 
 	exists, err := s.rdb.Exists(ctx, key).Result()
 	if err != nil {
@@ -229,13 +230,13 @@ func (s *Store) Update(ctx context.Context, id string, fields map[string]any) er
 
 // ListProjects returns all known project names.
 func (s *Store) ListProjects(ctx context.Context) ([]string, error) {
-	return s.rdb.SMembers(ctx, "projects").Result()
+	return s.rdb.SMembers(ctx, redis.KeyProjects).Result()
 }
 
 // CountByProject returns the number of memories for a project.
 func (s *Store) CountByProject(ctx context.Context, project string) (int, error) {
 	query := fmt.Sprintf("@project:{%s}", escapeTag(project))
-	res, err := s.rdb.Do(ctx, "FT.SEARCH", "idx:memories", query, "NOCONTENT", "LIMIT", 0, 0).Result()
+	res, err := s.rdb.Do(ctx, "FT.SEARCH", redis.IndexName, query, "NOCONTENT", "LIMIT", 0, 0).Result()
 	if err != nil {
 		return 0, fmt.Errorf("count by project: %w", err)
 	}
@@ -252,7 +253,7 @@ func (s *Store) GetStats(ctx context.Context, project string) (*MemoryStats, err
 
 	// Use FT.AGGREGATE for server-side stats: total, avg importance, min/max created_at per type
 	res, err := s.rdb.Do(ctx,
-		"FT.AGGREGATE", "idx:memories", query,
+		"FT.AGGREGATE", redis.IndexName, query,
 		"GROUPBY", "1", "@type",
 		"REDUCE", "COUNT", "0", "AS", "count",
 		"REDUCE", "AVG", "1", "@importance", "AS", "avg_imp",
@@ -270,7 +271,7 @@ func (s *Store) GetStats(ctx context.Context, project string) (*MemoryStats, err
 // getStatsLegacy is a fallback using FT.SEARCH with a capped result set.
 func (s *Store) getStatsLegacy(ctx context.Context, query string) (*MemoryStats, error) {
 	res, err := s.rdb.Do(ctx,
-		"FT.SEARCH", "idx:memories", query,
+		"FT.SEARCH", redis.IndexName, query,
 		"RETURN", "3", "type", "importance", "created_at",
 		"LIMIT", 0, 10000,
 	).Result()
@@ -283,7 +284,7 @@ func (s *Store) getStatsLegacy(ctx context.Context, query string) (*MemoryStats,
 // parseAggregateStats extracts stats from FT.AGGREGATE GROUPBY response.
 func parseAggregateStats(res any) (*MemoryStats, error) {
 	stats := &MemoryStats{
-		ByType: map[string]int{"fact": 0, "concept": 0, "narrative": 0},
+		ByType: map[string]int{string(Fact): 0, string(Concept): 0, string(Narrative): 0},
 	}
 
 	entries := getResultEntries(res)
@@ -323,7 +324,7 @@ func parseAggregateStats(res any) (*MemoryStats, error) {
 // SaveSession persists a session hash to Redis and indexes it in a sorted set
 // keyed by project for O(log N) latest-session lookups.
 func (s *Store) SaveSession(ctx context.Context, sess *Session) error {
-	key := "session:" + sess.ID
+	key := redis.KeyPrefixSession + sess.ID
 	fields := map[string]any{
 		"project":      sess.Project,
 		"started_at":   sess.StartedAt,
@@ -335,7 +336,7 @@ func (s *Store) SaveSession(ctx context.Context, sess *Session) error {
 	pipe := s.rdb.Pipeline()
 	pipe.HSet(ctx, key, fields)
 	// Index session by project with started_at as score for fast latest-session lookup
-	pipe.ZAdd(ctx, "project_sessions:"+sess.Project, goredis.Z{
+	pipe.ZAdd(ctx, redis.KeyPrefixProjectSessions+sess.Project, goredis.Z{
 		Score:  float64(sess.StartedAt),
 		Member: sess.ID,
 	})
@@ -349,7 +350,7 @@ func (s *Store) SaveSession(ctx context.Context, sess *Session) error {
 // sorted set index (O(log N) instead of the previous O(N) SCAN approach).
 func (s *Store) GetLastSession(ctx context.Context, project string) (*Session, error) {
 	// Get the highest-scored (most recent) session ID from the sorted set
-	ids, err := s.rdb.ZRevRange(ctx, "project_sessions:"+project, 0, 0).Result()
+	ids, err := s.rdb.ZRevRange(ctx, redis.KeyPrefixProjectSessions+project, 0, 0).Result()
 	if err != nil {
 		return nil, fmt.Errorf("get last session: %w", err)
 	}
@@ -357,7 +358,7 @@ func (s *Store) GetLastSession(ctx context.Context, project string) (*Session, e
 		return nil, nil // No previous session
 	}
 
-	key := "session:" + ids[0]
+	key := redis.KeyPrefixSession + ids[0]
 	vals, err := s.rdb.HGetAll(ctx, key).Result()
 	if err != nil {
 		return nil, fmt.Errorf("get session: %w", err)
@@ -373,7 +374,7 @@ func (s *Store) GetLastSession(ctx context.Context, project string) (*Session, e
 func (s *Store) GetTopMemories(ctx context.Context, project string, limit int) ([]Memory, error) {
 	query := fmt.Sprintf("@project:{%s}", escapeTag(project))
 	res, err := s.rdb.Do(ctx,
-		"FT.SEARCH", "idx:memories", query,
+		"FT.SEARCH", redis.IndexName, query,
 		"SORTBY", "importance", "DESC",
 		"LIMIT", 0, limit,
 	).Result()
@@ -428,7 +429,7 @@ func hashToMemory(id string, vals map[string]string) (*Memory, error) {
 
 func hashToSession(key string, vals map[string]string) *Session {
 	// Extract ID from key "session:ULID"
-	id := strings.TrimPrefix(key, "session:")
+	id := strings.TrimPrefix(key, redis.KeyPrefixSession)
 
 	startedAt, _ := strconv.ParseInt(vals["started_at"], 10, 64)
 	endedAt, _ := strconv.ParseInt(vals["ended_at"], 10, 64)
@@ -554,7 +555,7 @@ func computeStats(res any) (*MemoryStats, error) {
 
 	stats := &MemoryStats{
 		Total:  total,
-		ByType: map[string]int{"fact": 0, "concept": 0, "narrative": 0},
+		ByType: map[string]int{string(Fact): 0, string(Concept): 0, string(Narrative): 0},
 	}
 
 	entries := getResultEntries(res)
@@ -655,8 +656,5 @@ func getMapFloat(m map[any]any, key string) float64 {
 
 // @dev stripMemPrefix removes the "mem:" key prefix to get the plain ULID.
 func stripMemPrefix(key string) string {
-	if len(key) > 4 && key[:4] == "mem:" {
-		return key[4:]
-	}
-	return key
+	return strings.TrimPrefix(key, redis.KeyPrefixMemory)
 }

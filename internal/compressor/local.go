@@ -8,10 +8,9 @@ import (
 	"strings"
 	"unicode"
 
+	rediskeys "github.com/alle-bartoli/mnemoir/internal/redis"
 	"github.com/redis/go-redis/v9"
 )
-
-const tagFrequencyKey = "tags:frequency"
 
 // LocalCompressor extracts structured memories using rule-based text analysis.
 // No external API or model required. Tag vocabulary is learned from usage via Redis.
@@ -39,7 +38,7 @@ func IncrementTags(ctx context.Context, rdb *redis.Client, tags string) {
 		if tag == "" {
 			continue
 		}
-		pipe.ZIncrBy(ctx, tagFrequencyKey, 1, tag)
+		pipe.ZIncrBy(ctx, rediskeys.KeyTagFrequency, 1, tag)
 	}
 	if _, err := pipe.Exec(ctx); err != nil {
 		slog.Warn("failed to increment tag frequency", "error", err)
@@ -129,9 +128,9 @@ func (c *LocalCompressor) seedTags(ctx context.Context) error {
 	if c.rdb == nil {
 		return nil
 	}
-	count, err := c.rdb.ZCard(ctx, tagFrequencyKey).Result()
+	count, err := c.rdb.ZCard(ctx, rediskeys.KeyTagFrequency).Result()
 	if err != nil {
-		return fmt.Errorf("zcard %s: %w", tagFrequencyKey, err)
+		return fmt.Errorf("zcard %s: %w", rediskeys.KeyTagFrequency, err)
 	}
 	if count > 0 {
 		return nil
@@ -140,7 +139,7 @@ func (c *LocalCompressor) seedTags(ctx context.Context) error {
 	for i, kw := range defaultTechKeywords {
 		members[i] = redis.Z{Score: 0, Member: kw}
 	}
-	if err := c.rdb.ZAddNX(ctx, tagFrequencyKey, members...).Err(); err != nil {
+	if err := c.rdb.ZAddNX(ctx, rediskeys.KeyTagFrequency, members...).Err(); err != nil {
 		return fmt.Errorf("seed tags: %w", err)
 	}
 	slog.Info("seeded tag vocabulary", "count", len(defaultTechKeywords))
@@ -153,7 +152,7 @@ func (c *LocalCompressor) loadVocabulary(ctx context.Context) []string {
 	if c.rdb == nil {
 		return defaultTechKeywords
 	}
-	tags, err := c.rdb.ZRevRange(ctx, tagFrequencyKey, 0, -1).Result()
+	tags, err := c.rdb.ZRevRange(ctx, rediskeys.KeyTagFrequency, 0, -1).Result()
 	if err != nil || len(tags) == 0 {
 		if err != nil {
 			slog.Warn("failed to load tag vocabulary, using defaults", "error", err)

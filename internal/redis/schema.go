@@ -28,7 +28,7 @@ func EnsureIndex(ctx context.Context, c *Client, dimension int) error {
 
 func createIndex(ctx context.Context, c *Client, dimension int) error {
 	args := []any{
-		IndexName, "ON", "HASH", "PREFIX", "1", "mem:",
+		IndexName, "ON", "HASH", "PREFIX", "1", KeyPrefixMemory,
 		"SCHEMA",
 		"content", "TEXT", "WEIGHT", "1.0",
 		"type", "TAG",

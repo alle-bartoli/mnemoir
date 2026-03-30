@@ -32,11 +32,11 @@ type ICompressor interface {
 // rdb is used by the local compressor for learned tag vocabulary.
 func NewCompressor(cfg config.CompressorConfig, rdb *redis.Client) (ICompressor, error) {
 	switch cfg.Provider {
-	case "claude":
+	case config.CompressorProviderClaude:
 		return NewClaudeCompressor(cfg.Claude)
-	case "ollama":
+	case config.CompressorProviderOllama:
 		return NewOllamaCompressor(cfg.Ollama)
-	case "local":
+	case config.CompressorProviderLocal:
 		return NewLocalCompressor(rdb)
 	default:
 		return nil, fmt.Errorf("unknown compressor provider: %s", cfg.Provider)

@@ -9,6 +9,8 @@ import (
 	"sort"
 	"strconv"
 	"time"
+
+	"github.com/alle-bartoli/mnemoir/internal/redis"
 )
 
 // VectorSearch performs KNN similarity search using embeddings.
@@ -46,7 +48,7 @@ func (s *Store) vectorSearchRaw(ctx context.Context, query string, filters Searc
 	blob := float32ToBytes(emb)
 
 	args := []any{
-		"FT.SEARCH", "idx:memories",
+		"FT.SEARCH", redis.IndexName,
 		fmt.Sprintf("(%s)=>[KNN %d @embedding $vec AS score]", filterExpr, limit),
 		"PARAMS", "2", "vec", blob,
 		"SORTBY", "score",
@@ -82,7 +84,7 @@ func (s *Store) fullTextSearchRaw(ctx context.Context, query string, filters Sea
 	ftsQuery := buildFTSQuery(query, filters)
 
 	res, err := s.rdb.Do(ctx,
-		"FT.SEARCH", "idx:memories", ftsQuery,
+		"FT.SEARCH", redis.IndexName, ftsQuery,
 		"WITHSCORES",
 		"LIMIT", 0, limit,
 	).Result()

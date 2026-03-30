@@ -25,12 +25,12 @@ type OllamaCompressor struct {
 func NewOllamaCompressor(cfg config.CompressorOllamaConfig) (*OllamaCompressor, error) {
 	url := cfg.URL
 	if url == "" {
-		url = "http://localhost:11434"
+		url = config.DefaultOllamaURL
 	}
 
 	model := cfg.Model
 	if model == "" {
-		model = "llama3.2"
+		model = config.DefaultOllamaCompressorModel
 	}
 
 	// Security: prevent SSRF by restricting to localhost

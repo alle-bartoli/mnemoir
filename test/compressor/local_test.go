@@ -5,10 +5,9 @@ import (
 	"testing"
 
 	"github.com/alle-bartoli/mnemoir/internal/compressor"
+	rediskeys "github.com/alle-bartoli/mnemoir/internal/redis"
 	"github.com/redis/go-redis/v9"
 )
-
-const tagFrequencyKey = "tags:frequency"
 
 func newTestRedis(t *testing.T) *redis.Client {
 	t.Helper()
@@ -17,7 +16,7 @@ func newTestRedis(t *testing.T) *redis.Client {
 		t.Skipf("Redis not available: %v", err)
 	}
 	t.Cleanup(func() {
-		rdb.Del(context.Background(), tagFrequencyKey)
+		rdb.Del(context.Background(), rediskeys.KeyTagFrequency)
 		rdb.Close()
 	})
 	return rdb
@@ -29,14 +28,14 @@ func TestLocalCompressor(t *testing.T) {
 		ctx := context.Background()
 
 		// Ensure clean state
-		rdb.Del(ctx, tagFrequencyKey)
+		rdb.Del(ctx, rediskeys.KeyTagFrequency)
 
 		_, err := compressor.NewLocalCompressor(rdb)
 		if err != nil {
 			t.Fatalf("NewLocalCompressor: %v", err)
 		}
 
-		count, err := rdb.ZCard(ctx, tagFrequencyKey).Result()
+		count, err := rdb.ZCard(ctx, rediskeys.KeyTagFrequency).Result()
 		if err != nil {
 			t.Fatalf("ZCard: %v", err)
 		}
@@ -45,7 +44,7 @@ func TestLocalCompressor(t *testing.T) {
 		}
 
 		// Verify a known seed keyword exists with score 0
-		score, err := rdb.ZScore(ctx, tagFrequencyKey, "redis").Result()
+		score, err := rdb.ZScore(ctx, rediskeys.KeyTagFrequency, "redis").Result()
 		if err != nil {
 			t.Fatalf("ZScore redis: %v", err)
 		}
@@ -57,17 +56,17 @@ func TestLocalCompressor(t *testing.T) {
 	t.Run("SeedIsIdempotent", func(t *testing.T) {
 		rdb := newTestRedis(t)
 		ctx := context.Background()
-		rdb.Del(ctx, tagFrequencyKey)
+		rdb.Del(ctx, rediskeys.KeyTagFrequency)
 
 		// Create twice
 		_, _ = compressor.NewLocalCompressor(rdb)
 		// Manually bump a tag score
-		rdb.ZIncrBy(ctx, tagFrequencyKey, 5, "redis")
+		rdb.ZIncrBy(ctx, rediskeys.KeyTagFrequency, 5, "redis")
 
 		_, _ = compressor.NewLocalCompressor(rdb)
 
 		// Score should not be reset to 0
-		score, _ := rdb.ZScore(ctx, tagFrequencyKey, "redis").Result()
+		score, _ := rdb.ZScore(ctx, rediskeys.KeyTagFrequency, "redis").Result()
 		if score != 5 {
 			t.Errorf("expected score 5 after second seed, got %f", score)
 		}
@@ -76,22 +75,22 @@ func TestLocalCompressor(t *testing.T) {
 	t.Run("IncrementTags", func(t *testing.T) {
 		rdb := newTestRedis(t)
 		ctx := context.Background()
-		rdb.Del(ctx, tagFrequencyKey)
+		rdb.Del(ctx, rediskeys.KeyTagFrequency)
 
 		compressor.IncrementTags(ctx, rdb, "redis,docker,newtech")
 
-		score, _ := rdb.ZScore(ctx, tagFrequencyKey, "redis").Result()
+		score, _ := rdb.ZScore(ctx, rediskeys.KeyTagFrequency, "redis").Result()
 		if score != 1 {
 			t.Errorf("expected redis score 1, got %f", score)
 		}
-		score, _ = rdb.ZScore(ctx, tagFrequencyKey, "newtech").Result()
+		score, _ = rdb.ZScore(ctx, rediskeys.KeyTagFrequency, "newtech").Result()
 		if score != 1 {
 			t.Errorf("expected newtech score 1, got %f", score)
 		}
 
 		// Increment again
 		compressor.IncrementTags(ctx, rdb, "redis")
-		score, _ = rdb.ZScore(ctx, tagFrequencyKey, "redis").Result()
+		score, _ = rdb.ZScore(ctx, rediskeys.KeyTagFrequency, "redis").Result()
 		if score != 2 {
 			t.Errorf("expected redis score 2 after second increment, got %f", score)
 		}
@@ -100,10 +99,10 @@ func TestLocalCompressor(t *testing.T) {
 	t.Run("LearnedTagsUsedInCompress", func(t *testing.T) {
 		rdb := newTestRedis(t)
 		ctx := context.Background()
-		rdb.Del(ctx, tagFrequencyKey)
+		rdb.Del(ctx, rediskeys.KeyTagFrequency)
 
 		// Add a custom tag that wouldn't be in defaults
-		rdb.ZAdd(ctx, tagFrequencyKey, redis.Z{Score: 10, Member: "mnemoir"})
+		rdb.ZAdd(ctx, rediskeys.KeyTagFrequency, redis.Z{Score: 10, Member: "mnemoir"})
 
 		comp, err := compressor.NewLocalCompressor(rdb)
 		if err != nil {

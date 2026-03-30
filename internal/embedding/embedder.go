@@ -26,11 +26,11 @@ type IEmbedder interface {
 // Supported providers: "openai" (1536d), "ollama" (768d), "local" (384d ONNX).
 func NewEmbedder(cfg config.EmbeddingConfig) (IEmbedder, error) {
 	switch cfg.Provider {
-	case "openai":
+	case config.EmbeddingProviderOpenAI:
 		return NewOpenAIEmbedder(cfg.OpenAI, cfg.Dimension)
-	case "ollama":
+	case config.EmbeddingProviderOllama:
 		return NewOllamaEmbedder(cfg.Ollama, cfg.Dimension)
-	case "local":
+	case config.EmbeddingProviderLocal:
 		return NewLocalEmbedder(cfg.Local, cfg.Dimension)
 	default:
 		return nil, fmt.Errorf("unknown embedding provider: %s", cfg.Provider)

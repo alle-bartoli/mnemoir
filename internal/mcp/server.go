@@ -41,7 +41,7 @@ func registerTools(s *server.MCPServer, h *Handlers) {
 		mcp.WithString("type",
 			mcp.Required(),
 			mcp.Description("Memory type"),
-			mcp.Enum("fact", "concept", "narrative"),
+			mcp.Enum(string(memory.Fact), string(memory.Concept), string(memory.Narrative)),
 		),
 		mcp.WithString("project",
 			mcp.Required(),
@@ -69,7 +69,7 @@ func registerTools(s *server.MCPServer, h *Handlers) {
 		),
 		mcp.WithString("type",
 			mcp.Description("Filter by memory type"),
-			mcp.Enum("fact", "concept", "narrative"),
+			mcp.Enum(string(memory.Fact), string(memory.Concept), string(memory.Narrative)),
 		),
 		mcp.WithNumber("limit",
 			mcp.Description("Maximum number of results (default 10)"),
@@ -78,7 +78,7 @@ func registerTools(s *server.MCPServer, h *Handlers) {
 		),
 		mcp.WithString("search_mode",
 			mcp.Description("Search strategy to use"),
-			mcp.Enum("vector", "fulltext", "hybrid"),
+			mcp.Enum(string(memory.Vector), string(memory.FullText), string(memory.Hybrid)),
 		),
 	), h.Recall)
 

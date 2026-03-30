@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `internal/redis/keys.go`: centralized Redis key prefix constants (`KeyPrefixMemory`, `KeyPrefixSession`, `KeyPrefixProjectSessions`, `KeyProjects`, `KeyPrefixMaintLastRun`, `KeyTagFrequency`)
+- `internal/config/providers.go`: centralized provider identifiers, environment variable names, and default configuration values as shared constants
 - `POST /end-session` HTTP endpoint on sideband server: accepts `{"observations": "...", "summary": "..."}`, delegates to existing `EndSession` handler, returns 404 if no active session
 - `scripts/session-end-hook.sh`: Claude Code `SessionEnd` hook script that calls `/end-session` via curl for graceful session closure on `ctrl+c`
 - `scripts/install-hook.sh`: idempotent installer that merges `SessionEnd` hook into `~/.claude/settings.json` via `jq`
@@ -26,6 +28,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Replaced all scattered Redis key prefix strings across `memory/store.go`, `memory/search.go`, `memory/maintenance.go`, `redis/schema.go`, `compressor/local.go`, and test files with constants from `redis/keys.go`
+- Replaced inline `"idx:memories"` usage (8 occurrences in memory package) with `redis.IndexName`
+- Replaced provider name strings in `embedding/embedder.go`, `compressor/compressor.go`, and `config/config.go` validation with typed constants from `config/providers.go`
+- Replaced environment variable strings in `config/config.go`, `compressor/claude.go`, and `embedding/openai.go` with `config.Env*` constants
+- Replaced default model/URL fallback values in provider constructors with `config.Default*` constants, eliminating duplication between `config.go` defaults and individual constructors
+- Replaced raw `"fact"/"concept"/"narrative"` strings in `parseAggregateStats` and `computeStats` with typed `memory.Fact`/`memory.Concept`/`memory.Narrative` constants
+- Replaced raw `"vector"/"fulltext"/"hybrid"` enum values in `mcp/server.go` tool registration with typed `memory.Vector`/`memory.FullText`/`memory.Hybrid` constants
 - Default `server.health_addr` changed from `""` (disabled) to `":9090"` (enabled) so the sideband HTTP server and session hook work out of the box
 - `make setup` is now a full installation: docker + build + config + MCP global registration + SessionEnd hook + agent instructions in `~/.claude/CLAUDE.md`
 - `make uninstall` now also removes the SessionEnd hook from Claude Code settings

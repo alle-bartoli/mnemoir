@@ -56,13 +56,13 @@ func newMaintTestStore(t *testing.T) (*memory.Store, *goredis.Client) {
 		if len(keys) > 0 {
 			rdb.Del(ctx, keys...)
 		}
-		sessKeys, _ := rdb.Keys(ctx, "session:test-maint-*").Result()
+		sessKeys, _ := rdb.Keys(ctx, redisclient.KeyPrefixSession+"test-maint-*").Result()
 		if len(sessKeys) > 0 {
 			rdb.Del(ctx, sessKeys...)
 		}
-		rdb.Del(ctx, "project_sessions:"+maintProject)
-		rdb.Del(ctx, "maint:last_run:"+maintProject)
-		rdb.SRem(ctx, "projects", maintProject)
+		rdb.Del(ctx, redisclient.KeyPrefixProjectSessions+maintProject)
+		rdb.Del(ctx, redisclient.KeyPrefixMaintLastRun+maintProject)
+		rdb.SRem(ctx, redisclient.KeyProjects, maintProject)
 		_ = emb.Close()
 		_ = rdb.Close()
 	})
@@ -133,7 +133,7 @@ func TestMaintenance(t *testing.T) {
 		// Cleanup for next subtests
 		store.Delete(ctx, "test-maint-important")
 		store.Delete(ctx, "test-maint-recent")
-		rdb.Del(ctx, "maint:last_run:"+maintProject)
+		rdb.Del(ctx, redisclient.KeyPrefixMaintLastRun+maintProject)
 	})
 
 	t.Run("PruneSessions", func(t *testing.T) {
@@ -158,38 +158,38 @@ func TestMaintenance(t *testing.T) {
 		}
 
 		// Verify only 3 sessions remain in sorted set
-		remaining, _ := rdb.ZCard(ctx, "project_sessions:"+maintProject).Result()
+		remaining, _ := rdb.ZCard(ctx, redisclient.KeyPrefixProjectSessions+maintProject).Result()
 		if remaining != 3 {
 			t.Errorf("expected 3 remaining sessions, got %d", remaining)
 		}
 
 		// Verify the oldest 2 session hashes are deleted
 		for i := 0; i < 2; i++ {
-			exists, _ := rdb.Exists(ctx, fmt.Sprintf("session:test-maint-sess-%d", i)).Result()
+			exists, _ := rdb.Exists(ctx, fmt.Sprintf(redisclient.KeyPrefixSession+"test-maint-sess-%d", i)).Result()
 			if exists > 0 {
 				t.Errorf("session test-maint-sess-%d should have been pruned", i)
 			}
 		}
 		// Verify newest 3 survive
 		for i := 2; i < 5; i++ {
-			exists, _ := rdb.Exists(ctx, fmt.Sprintf("session:test-maint-sess-%d", i)).Result()
+			exists, _ := rdb.Exists(ctx, fmt.Sprintf(redisclient.KeyPrefixSession+"test-maint-sess-%d", i)).Result()
 			if exists == 0 {
 				t.Errorf("session test-maint-sess-%d should survive", i)
 			}
 		}
 
-		rdb.Del(ctx, "maint:last_run:"+maintProject)
+		rdb.Del(ctx, redisclient.KeyPrefixMaintLastRun+maintProject)
 	})
 
 	t.Run("CleanupOrphans", func(t *testing.T) {
 		// Add a stale sorted set entry pointing to a non-existent session
-		rdb.ZAdd(ctx, "project_sessions:"+maintProject, goredis.Z{
+		rdb.ZAdd(ctx, redisclient.KeyPrefixProjectSessions+maintProject, goredis.Z{
 			Score:  1.0,
 			Member: "test-maint-ghost",
 		})
 
 		// Clear throttle and run
-		rdb.Del(ctx, "maint:last_run:"+maintProject)
+		rdb.Del(ctx, redisclient.KeyPrefixMaintLastRun+maintProject)
 
 		result, err := store.RunMaintenance(ctx, maintProject, defaultMaintCfg, defaultMemCfg)
 		if err != nil {
@@ -200,7 +200,7 @@ func TestMaintenance(t *testing.T) {
 		}
 
 		// Verify ghost is removed from sorted set
-		members, _ := rdb.ZRange(ctx, "project_sessions:"+maintProject, 0, -1).Result()
+		members, _ := rdb.ZRange(ctx, redisclient.KeyPrefixProjectSessions+maintProject, 0, -1).Result()
 		for _, m := range members {
 			if m == "test-maint-ghost" {
 				t.Error("ghost session should have been removed from sorted set")
@@ -209,7 +209,7 @@ func TestMaintenance(t *testing.T) {
 	})
 
 	t.Run("LastRunStats", func(t *testing.T) {
-		rdb.Del(ctx, "maint:last_run:"+maintProject)
+		rdb.Del(ctx, redisclient.KeyPrefixMaintLastRun+maintProject)
 
 		_, err := store.RunMaintenance(ctx, maintProject, defaultMaintCfg, defaultMemCfg)
 		if err != nil {
@@ -217,7 +217,7 @@ func TestMaintenance(t *testing.T) {
 		}
 
 		// Verify last_run is a hash with expected fields
-		runKey := "maint:last_run:" + maintProject
+		runKey := redisclient.KeyPrefixMaintLastRun + maintProject
 		keyType, err := rdb.Type(ctx, runKey).Result()
 		if err != nil {
 			t.Fatalf("TYPE: %v", err)
@@ -253,7 +253,7 @@ func TestMaintenance(t *testing.T) {
 
 	t.Run("SkipWhenRecent", func(t *testing.T) {
 		// First run sets the throttle key
-		rdb.Del(ctx, "maint:last_run:"+maintProject)
+		rdb.Del(ctx, redisclient.KeyPrefixMaintLastRun+maintProject)
 		_, err := store.RunMaintenance(ctx, maintProject, defaultMaintCfg, defaultMemCfg)
 		if err != nil {
 			t.Fatalf("first run: %v", err)

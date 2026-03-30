@@ -84,17 +84,17 @@ func newTestStore(t *testing.T) *memory.Store {
 	store := memory.NewStore(rdb, emb, defaultMemCfg)
 
 	t.Cleanup(func() {
-		keys, _ := rdb.Keys(ctx, "mem:test-*").Result()
+		keys, _ := rdb.Keys(ctx, redisclient.KeyPrefixMemory+"test-*").Result()
 		if len(keys) > 0 {
 			rdb.Del(ctx, keys...)
 		}
 		// Clean up session keys and sorted sets created by SaveSession
-		sessKeys, _ := rdb.Keys(ctx, "session:test-*").Result()
+		sessKeys, _ := rdb.Keys(ctx, redisclient.KeyPrefixSession+"test-*").Result()
 		if len(sessKeys) > 0 {
 			rdb.Del(ctx, sessKeys...)
 		}
-		rdb.Del(ctx, "project_sessions:"+testProject)
-		rdb.SRem(ctx, "projects", testProject)
+		rdb.Del(ctx, redisclient.KeyPrefixProjectSessions+testProject)
+		rdb.SRem(ctx, redisclient.KeyProjects, testProject)
 		_ = emb.Close()
 		_ = rdb.Close()
 	})
@@ -143,15 +143,15 @@ func newSearchTestStore(t *testing.T) (*memory.Store, *goredis.Client) {
 
 	t.Cleanup(func() {
 		for _, m := range mems {
-			_ = rdb.Del(ctx, "mem:"+m.ID).Err()
+			_ = rdb.Del(ctx, redisclient.KeyPrefixMemory+m.ID).Err()
 		}
 		// Clean up session keys and sorted sets created by SaveSession
-		sessKeys, _ := rdb.Keys(ctx, "session:test-*").Result()
+		sessKeys, _ := rdb.Keys(ctx, redisclient.KeyPrefixSession+"test-*").Result()
 		if len(sessKeys) > 0 {
 			rdb.Del(ctx, sessKeys...)
 		}
-		rdb.Del(ctx, "project_sessions:"+searchTestProject)
-		rdb.SRem(ctx, "projects", searchTestProject)
+		rdb.Del(ctx, redisclient.KeyPrefixProjectSessions+searchTestProject)
+		rdb.SRem(ctx, redisclient.KeyProjects, searchTestProject)
 		_ = emb.Close()
 		_ = rdb.Close()
 	})

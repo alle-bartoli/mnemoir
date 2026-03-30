@@ -147,25 +147,25 @@ func Load(path string) (*Config, error) {
 
 	cfg := &Config{
 		Redis: RedisConfig{
-			Addr: "localhost:6379",
+			Addr: DefaultRedisAddr,
 			DB:   0,
 		},
 		Compressor: CompressorConfig{
-			Provider: "claude",
-			Claude:   CompressorClaudeConfig{Model: "claude-haiku-4-5-20251001"},
-			Ollama:   CompressorOllamaConfig{URL: "http://localhost:11434", Model: "llama3.2"},
+			Provider: CompressorProviderClaude,
+			Claude:   CompressorClaudeConfig{Model: DefaultClaudeModel},
+			Ollama:   CompressorOllamaConfig{URL: DefaultOllamaURL, Model: DefaultOllamaCompressorModel},
 		},
 		Embedding: EmbeddingConfig{
-			Provider:  "openai",
+			Provider:  EmbeddingProviderOpenAI,
 			Dimension: 1536,
-			OpenAI:    EmbeddingOpenAIConfig{Model: "text-embedding-3-small"},
-			Ollama:    EmbeddingOllamaConfig{URL: "http://localhost:11434", Model: "nomic-embed-text"},
-			Local:     EmbeddingLocalConfig{Model: "sentence-transformers/all-MiniLM-L6-v2", ModelDir: "~/.mnemoir/models"},
+			OpenAI:    EmbeddingOpenAIConfig{Model: DefaultOpenAIEmbeddingModel},
+			Ollama:    EmbeddingOllamaConfig{URL: DefaultOllamaURL, Model: DefaultOllamaEmbeddingModel},
+			Local:     EmbeddingLocalConfig{Model: DefaultLocalEmbeddingModel, ModelDir: DefaultModelDir},
 		},
 		Memory: MemoryConfig{
 			DefaultImportance: 5,
 			AutoDecay:         true,
-			DecayInterval:     "168h",
+			DecayInterval:     DefaultDecayInterval,
 			DecayFactor:       0.9,
 			VectorWeight:      0.60,
 			FTSWeight:         0.25,
@@ -182,7 +182,7 @@ func Load(path string) (*Config, error) {
 			ForgetThreshold:      2.0,
 			ForgetInactiveDays:   90,
 			MaxSessionsPerProject: 50,
-			MinRunInterval:       "1h",
+			MinRunInterval:       DefaultMinRunInterval,
 		},
 	}
 
@@ -200,18 +200,28 @@ func Load(path string) (*Config, error) {
 // Validate checks all config invariants and returns the first error found.
 func (c *Config) Validate() error {
 	// Embedding
-	validProviders := map[string]bool{"openai": true, "ollama": true, "local": true}
-	if !validProviders[c.Embedding.Provider] {
-		return fmt.Errorf("embedding.provider must be one of: openai, ollama, local (got %q)", c.Embedding.Provider)
+	validEmbeddingProviders := map[string]bool{
+		EmbeddingProviderOpenAI: true,
+		EmbeddingProviderOllama: true,
+		EmbeddingProviderLocal:  true,
+	}
+	if !validEmbeddingProviders[c.Embedding.Provider] {
+		return fmt.Errorf("embedding.provider must be one of: %s, %s, %s (got %q)",
+			EmbeddingProviderOpenAI, EmbeddingProviderOllama, EmbeddingProviderLocal, c.Embedding.Provider)
 	}
 	if c.Embedding.Dimension <= 0 {
 		return fmt.Errorf("embedding.dimension must be > 0 (got %d)", c.Embedding.Dimension)
 	}
 
 	// Compressor
-	validCompressors := map[string]bool{"claude": true, "ollama": true, "local": true}
-	if !validCompressors[c.Compressor.Provider] {
-		return fmt.Errorf("compressor.provider must be one of: claude, ollama, local (got %q)", c.Compressor.Provider)
+	validCompressorProviders := map[string]bool{
+		CompressorProviderClaude: true,
+		CompressorProviderOllama: true,
+		CompressorProviderLocal:  true,
+	}
+	if !validCompressorProviders[c.Compressor.Provider] {
+		return fmt.Errorf("compressor.provider must be one of: %s, %s, %s (got %q)",
+			CompressorProviderClaude, CompressorProviderOllama, CompressorProviderLocal, c.Compressor.Provider)
 	}
 
 	// Memory
@@ -262,10 +272,10 @@ func (c *Config) Validate() error {
 
 // Security: only these env vars are expanded in config TOML
 var allowedEnvVars = map[string]bool{
-	"ANTHROPIC_API_KEY":       true,
-	"OPENAI_API_KEY":          true,
-	"HOME":                    true,
-	"MNEMOIR_REDIS_PASSWORD": true,
+	EnvAnthropicAPIKey: true,
+	EnvOpenAIAPIKey:    true,
+	EnvHome:            true,
+	EnvRedisPassword:   true,
 }
 
 func expandAllowedEnv(s string) string {

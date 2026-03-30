@@ -24,14 +24,14 @@ type OpenAIEmbedder struct {
 
 // NewOpenAIEmbedder creates an OpenAI-backed embedder.
 func NewOpenAIEmbedder(cfg config.EmbeddingOpenAIConfig, dimension int) (*OpenAIEmbedder, error) {
-	apiKey := os.Getenv("OPENAI_API_KEY")
+	apiKey := os.Getenv(config.EnvOpenAIAPIKey)
 	if apiKey == "" {
-		return nil, fmt.Errorf("OPENAI_API_KEY environment variable not set")
+		return nil, fmt.Errorf("%s environment variable not set", config.EnvOpenAIAPIKey)
 	}
 
 	model := cfg.Model
 	if model == "" {
-		model = "text-embedding-3-small"
+		model = config.DefaultOpenAIEmbeddingModel
 	}
 
 	return &OpenAIEmbedder{

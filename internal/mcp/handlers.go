@@ -153,7 +153,7 @@ func (h *Handlers) Recall(ctx context.Context, req mcp.CallToolRequest) (*mcp.Ca
 	project := req.GetString("project", "")
 	memType := req.GetString("type", "")
 	limit := req.GetInt("limit", 10)
-	searchMode := req.GetString("search_mode", "hybrid")
+	searchMode := req.GetString("search_mode", string(memory.Hybrid))
 
 	// Server-side clamping: never trust schema-level validation alone
 	if limit < minLimit {
