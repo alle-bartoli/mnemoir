@@ -15,6 +15,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - Renamed `mcp-register` to `mcp` and `mcp-register-global` to `mcp-global` for shorter CLI usage
+- Rewrote `docs/agent-instructions.md` with comprehensive tool documentation: parameter tables for all 8 tools, search mode tradeoffs, `forget`/`update_memory` workflows, dedicated `end_session` section, utility tools, and continuous usage pattern
 - README updated with both registration scopes (project-local vs global) in Quick Start, Claude Code section, and Development commands
 
 ## [Unreleased] - 2026-03-29 (Alessandro Bartoli)

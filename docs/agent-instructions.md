@@ -33,41 +33,102 @@ Use `tags` for discoverability: `"redis,config"`, `"auth,security,bug"`, `"api,d
 
 ### When to recall memories
 
-Call `recall` before:
+Call `recall` **before starting any task**. This is not optional. Always check for prior context before doing work.
+
+Recall before:
 
 - Starting work on a feature (what was decided before?)
 - Debugging (has this happened before?)
 - Making architecture decisions (what constraints exist?)
 - Touching unfamiliar code (what does the team know about it?)
 
-Use `search_mode: "hybrid"` (default) for best results. Use `"fulltext"` when searching for a specific keyword or name. Use `"vector"` when searching by concept or meaning.
+#### Search modes
+
+| Mode               | Use when                                              | Example                                         |
+| ------------------ | ----------------------------------------------------- | ----------------------------------------------- |
+| `hybrid` (default) | General queries, best overall results                 | `"authentication flow"`                         |
+| `fulltext`         | Searching for a specific keyword, name, or error code | `"MNEMOIR_REDIS_PASSWORD"`, `"TOCTOU race"`     |
+| `vector`           | Searching by concept or meaning, fuzzy match          | `"how does decay work"`, `"why we chose Redis"` |
+
+#### Parameters
+
+| Parameter     | Required | Default      | Description                               |
+| ------------- | -------- | ------------ | ----------------------------------------- |
+| `query`       | yes      | -            | Search text (max 4KB)                     |
+| `project`     | no       | all projects | Scope results to a project                |
+| `type`        | no       | all types    | Filter: `fact`, `concept`, or `narrative` |
+| `search_mode` | no       | `hybrid`     | `vector`, `fulltext`, or `hybrid`         |
+| `limit`       | no       | 10           | Results to return (1-100)                 |
 
 Always pass `project` to scope results. Use `type` filter when you know what you are looking for (e.g. `type: "fact"` for configuration values).
 
 ### When to forget
 
-Call `forget` to clean up:
+Call `forget` to clean up outdated or duplicate memories. At least one parameter is required.
 
-- Outdated facts after a migration or version bump
-- Memories about deleted features or abandoned approaches
-- Duplicates or low-value clutter
+| Parameter    | Description                         | Example            |
+| ------------ | ----------------------------------- | ------------------ |
+| `id`         | Delete a specific memory by ULID    | `"01KMX7M123..."`  |
+| `project`    | Delete all memories in a project    | `"old-project"`    |
+| `older_than` | Delete memories older than duration | `"720h"` (30 days) |
+
+Parameters can be combined: `project` + `older_than` deletes old memories from a specific project.
+
+Note: `start_session` automatically runs maintenance (auto-forget stale low-importance memories, session pruning, orphan cleanup). You don't need to manually forget memories that would be cleaned up by decay.
 
 ### When to update
 
-Call `update_memory` when:
+Call `update_memory` when a stored fact changes or needs correction. You need the memory ID, so `recall` first to find it.
 
-- A fact changes (port number, dependency version, API endpoint)
-- Importance should be adjusted after new context emerges
-- Tags need correction
+| Parameter    | Required | Description                         |
+| ------------ | -------- | ----------------------------------- |
+| `id`         | yes      | Memory ULID (from `recall` results) |
+| `content`    | no       | New content text                    |
+| `importance` | no       | New importance (1-10)               |
+| `tags`       | no       | New comma-separated tags            |
 
-### Example flow
+### When to end sessions
+
+Call `end_session` **before every conversation ends**. This is not optional. If the user signals they are done (goodbye, thanks, closing the conversation), call `end_session` first.
+
+| Parameter      | Required | Description                                                                  |
+| -------------- | -------- | ---------------------------------------------------------------------------- |
+| `observations` | no       | Raw notes about what happened: decisions, bugs found, patterns, changes made |
+| `summary`      | no       | Override the auto-generated summary. Omit to let the system generate one.    |
+
+Always pass `observations`. The system extracts and classifies memories (facts, concepts, narratives) from your observations automatically. This is how session knowledge persists without manually storing every detail.
+
+A good `observations` value includes:
+
+- What was changed and why
+- Decisions made and their rationale
+- Bugs found or fixed
+- Files modified
+- Anything surprising or non-obvious
+
+```
+end_session(observations: "Renamed Makefile targets mcp-register -> mcp,
+  mcp-register-global -> mcp-global for shorter CLI. Updated README (3 spots)
+  and CHANGELOG. User prefers short target names over verbose ones.")
+```
+
+### Utility tools
+
+| Tool            | When to use                                                                                   |
+| --------------- | --------------------------------------------------------------------------------------------- |
+| `list_projects` | Discover which projects have stored memories                                                  |
+| `memory_stats`  | Check memory health: total count, type distribution, avg importance. Pass `project` to scope. |
+
+### Continuous usage pattern
+
+Mnemoir is not a start/end-only tool. Use it throughout the conversation:
 
 ```
 1. start_session(project: "my-app")
    -> reads previous summary, loads top memories
 
 2. recall(query: "authentication flow", project: "my-app")
-   -> finds relevant memories about auth
+   -> finds relevant memories before starting work
 
 3. [do the work]
 
@@ -75,8 +136,21 @@ Call `update_memory` when:
                 type: "concept", project: "my-app",
                 tags: "auth,cookies,decision", importance: 7)
 
-5. end_session(observations: "Migrated auth from JWT to session cookies.
+5. [do more work on a different topic]
+
+6. recall(query: "database migrations", project: "my-app")
+   -> check context before next task
+
+7. [do the work]
+
+8. store_memory(content: "Added index on users.email, query time dropped from 2s to 50ms",
+                type: "narrative", project: "my-app",
+                tags: "database,performance,migration", importance: 5)
+
+9. end_session(observations: "Migrated auth from JWT to session cookies.
    Updated middleware in auth.go. Tests passing. Cookie domain set to
-   .example.com for staging.")
+   .example.com for staging. Added DB index on users.email.")
    -> auto-extracts facts/concepts/narratives from observations
 ```
+
+The key rule: **recall before every task, store after every meaningful change**. Do not batch everything to `end_session`. Store important decisions and findings as they happen so they are immediately available for recall in subsequent tasks within the same session.
