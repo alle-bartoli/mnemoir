@@ -412,18 +412,25 @@ func (h *Handlers) EndSession(ctx context.Context, req mcp.CallToolRequest) (*mc
 }
 
 // ListProjects handles the list_projects tool.
+// Uses a single FT.AGGREGATE to fetch all project counts instead of N+1 FT.SEARCH calls.
 func (h *Handlers) ListProjects(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 	projects, err := h.store.ListProjects(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("list projects: %w", err)
 	}
 
+	// Single FT.AGGREGATE replaces per-project CountByProject loop (1 round-trip vs N)
+	counts, countErr := h.store.CountAllByProject(ctx)
+	if countErr != nil {
+		slog.Warn("CountAllByProject failed, counts will be zero", "error", countErr)
+		counts = make(map[string]int)
+	}
+
 	items := make([]map[string]any, 0, len(projects))
 	for _, p := range projects {
-		count, _ := h.store.CountByProject(ctx, p)
 		items = append(items, map[string]any{
 			"project":      p,
-			"memory_count": count,
+			"memory_count": counts[p],
 		})
 	}
 

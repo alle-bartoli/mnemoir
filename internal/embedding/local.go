@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 
 	"github.com/alle-bartoli/mnemoir/internal/config"
 	"github.com/knights-analytics/hugot"
@@ -15,7 +16,11 @@ import (
 const localDefaultDimension = 384
 
 // LocalEmbedder runs ONNX models locally via hugot (pure Go, no CGO).
+// The hugot pipeline is NOT goroutine-safe (data race in gomlx backend),
+// so all calls are serialized via mu. This is required because HybridSearch
+// runs vector and FTS searches concurrently, both of which may call Embed.
 type LocalEmbedder struct {
+	mu        sync.Mutex
 	session   *hugot.Session
 	pipeline  *pipelines.FeatureExtractionPipeline
 	dimension int
@@ -70,8 +75,11 @@ func NewLocalEmbedder(cfg config.EmbeddingLocalConfig, dimension int) (*LocalEmb
 }
 
 // Embed generates an embedding vector for the given text.
+// Serialized via mutex because hugot's gomlx backend is not goroutine-safe.
 func (e *LocalEmbedder) Embed(ctx context.Context, text string) ([]float32, error) {
+	e.mu.Lock()
 	result, err := e.pipeline.RunPipeline([]string{text})
+	e.mu.Unlock()
 	if err != nil {
 		return nil, fmt.Errorf("local embed: %w", err)
 	}

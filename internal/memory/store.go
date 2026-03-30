@@ -243,6 +243,35 @@ func (s *Store) CountByProject(ctx context.Context, project string) (int, error)
 	return extractTotalFromSearch(res), nil
 }
 
+// CountAllByProject returns memory counts grouped by project in a single FT.AGGREGATE call.
+// Replaces the N+1 pattern of calling CountByProject per project (1 round-trip vs N).
+//
+// The generated query:
+//
+//	FT.AGGREGATE idx:memories * GROUPBY 1 @project REDUCE COUNT 0 AS count
+func (s *Store) CountAllByProject(ctx context.Context) (map[string]int, error) {
+	res, err := s.rdb.Do(ctx,
+		"FT.AGGREGATE", redis.IndexName, "*",
+		"GROUPBY", "1", "@project",
+		"REDUCE", "COUNT", "0", "AS", "count",
+	).Result()
+	if err != nil {
+		return nil, fmt.Errorf("count all by project: %w", err)
+	}
+
+	counts := make(map[string]int)
+	entries := getResultEntries(res)
+	for _, entry := range entries {
+		attrs := getExtraAttributes(entry)
+		project := attrs["project"]
+		count, _ := strconv.Atoi(attrs["count"])
+		if project != "" {
+			counts[project] = count
+		}
+	}
+	return counts, nil
+}
+
 // GetStats returns aggregate statistics, optionally filtered by project.
 // Uses FT.AGGREGATE for server-side computation (no 10k result cap).
 func (s *Store) GetStats(ctx context.Context, project string) (*MemoryStats, error) {
@@ -447,36 +476,22 @@ func hashToSession(key string, vals map[string]string) *Session {
 	}
 }
 
-func escapeTag(s string) string {
-	// RediSearch TAG fields need escaping for special chars
-	replacer := []string{
-		"-", "\\-",
-		".", "\\.",
-		"@", "\\@",
-		" ", "\\ ",
-	}
-	result := s
-	for i := 0; i < len(replacer); i += 2 {
-		result = replaceAll(result, replacer[i], replacer[i+1])
-	}
-	return result
-}
+// tagEscaper is a package-level replacer for RediSearch TAG field special characters.
+// Created once and reused across all queries, avoiding per-call string allocations.
+// The old replaceAll() built strings via byte-by-byte concatenation (O(n*m) allocations).
+var tagEscaper = strings.NewReplacer(
+	"-", "\\-",
+	".", "\\.",
+	"@", "\\@",
+	" ", "\\ ",
+)
 
-func replaceAll(s, old, new string) string {
-	result := ""
-	for i := 0; i < len(s); i++ {
-		if i+len(old) <= len(s) && s[i:i+len(old)] == old {
-			result += new
-			i += len(old) - 1
-		} else {
-			result += string(s[i])
-		}
-	}
-	return result
+func escapeTag(s string) string {
+	return tagEscaper.Replace(s)
 }
 
 func buildFilterQuery(project string, olderThan time.Duration) string {
-	parts := []string{}
+	parts := make([]string, 0, 2) // at most project + age filter
 	if project != "" {
 		parts = append(parts, fmt.Sprintf("@project:{%s}", escapeTag(project)))
 	}
@@ -487,20 +502,13 @@ func buildFilterQuery(project string, olderThan time.Duration) string {
 	if len(parts) == 0 {
 		return "*"
 	}
-	query := ""
-	for i, p := range parts {
-		if i > 0 {
-			query += " "
-		}
-		query += p
-	}
-	return query
+	return strings.Join(parts, " ")
 }
 
 // @dev extractIDsFromSearch extracts memory keys from a NOCONTENT FT.SEARCH response.
 func extractIDsFromSearch(res any) []string {
 	entries := getResultEntries(res)
-	var ids []string
+	ids := make([]string, 0, len(entries))
 	for _, entry := range entries {
 		if id := getMapString(entry, "id"); id != "" {
 			ids = append(ids, id)
@@ -528,7 +536,7 @@ func extractMemoriesFromSearch(res any) ([]Memory, error) {
 		return nil, nil
 	}
 
-	var memories []Memory
+	memories := make([]Memory, 0, len(entries))
 	for _, entry := range entries {
 		id := stripMemPrefix(getMapString(entry, "id"))
 		vals := getExtraAttributes(entry)
@@ -604,7 +612,7 @@ func getResultEntries(res any) []map[any]any {
 	if !ok {
 		return nil
 	}
-	var entries []map[any]any
+	entries := make([]map[any]any, 0, len(results))
 	for _, item := range results {
 		if entry, ok := item.(map[any]any); ok {
 			entries = append(entries, entry)
@@ -615,18 +623,25 @@ func getResultEntries(res any) []map[any]any {
 
 // @dev getExtraAttributes extracts field values from a result entry as map[string]string.
 // In RESP3, fields are in "extra_attributes" as map[any]any (not a flat array).
+// Fast-path: string values are type-asserted directly (zero-alloc), avoiding fmt.Sprintf
+// reflection overhead. Sprintf is only used as fallback for non-string types (rare).
 func getExtraAttributes(entry map[any]any) map[string]string {
-	m := make(map[string]string)
 	attrs, ok := entry["extra_attributes"].(map[any]any)
 	if !ok {
-		return m
+		return make(map[string]string)
 	}
+	m := make(map[string]string, len(attrs))
 	for k, v := range attrs {
 		key, ok := k.(string)
 		if !ok {
 			continue
 		}
-		m[key] = fmt.Sprintf("%v", v)
+		// Fast path: most Redis hash values are strings, skip fmt reflection
+		if s, ok := v.(string); ok {
+			m[key] = s
+		} else {
+			m[key] = fmt.Sprintf("%v", v)
+		}
 	}
 	return m
 }

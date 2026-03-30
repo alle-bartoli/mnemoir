@@ -7,14 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased] - 2026-03-30 (Alessandro Bartoli)
 
-### Fixed
-
-- `list_projects` did not return projects that only had sessions but no stored memories; `SaveSession` now registers the project in the `projects` SET
-- `cleanupOrphans` removed projects from `projects` SET when they had 0 memories even if sessions still existed; now checks both `memCount == 0 AND sessCount == 0`
-- `CleanupOrphans` test ghost session used score `1.0` (oldest), causing `pruneSessions` to remove it before `cleanupOrphans` could detect it; fixed with a future timestamp score
-
 ### Added
 
+- `Store.CountAllByProject` method: fetches memory counts grouped by project in a single `FT.AGGREGATE` call
 - `internal/redis/keys.go`: centralized Redis key prefix constants (`KeyPrefixMemory`, `KeyPrefixSession`, `KeyPrefixProjectSessions`, `KeyProjects`, `KeyPrefixMaintLastRun`, `KeyTagFrequency`)
 - `internal/config/providers.go`: centralized provider identifiers, environment variable names, and default configuration values as shared constants
 - `POST /end-session` HTTP endpoint on sideband server: accepts `{"observations": "...", "summary": "..."}`, delegates to existing `EndSession` handler, returns 404 if no active session
@@ -34,6 +29,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- `trackAccess` now pipelines all Lua script calls into a single Redis round-trip instead of N sequential calls per search result
+- `HybridSearch` runs vector and FTS searches concurrently via goroutines, reducing latency from `embed + vector + fts` to `embed + max(vector, fts)`
+- `escapeTag` replaced custom byte-by-byte `replaceAll` with a package-level `strings.NewReplacer` (single allocation, reusable)
+- `ListProjects` handler replaced N+1 `CountByProject` loop with single `FT.AGGREGATE GROUPBY @project REDUCE COUNT 0` query
+- `buildSearchFilter` and `buildFilterQuery` now use `strings.Join` instead of manual string concatenation
+- `getExtraAttributes` fast-paths string type assertions before falling back to `fmt.Sprintf`, avoiding reflection on the common case
+- Pre-allocated result slices in `extractIDsFromSearch`, `extractMemoriesFromSearch`, `extractSearchResults`, `extractFTSResults`, and `getResultEntries`
+- Added `sync.Mutex` to `LocalEmbedder.Embed` to protect against hugot/gomlx data race under concurrent access (exposed by new HybridSearch parallelism)
 - Replaced all scattered Redis key prefix strings across `memory/store.go`, `memory/search.go`, `memory/maintenance.go`, `redis/schema.go`, `compressor/local.go`, and test files with constants from `redis/keys.go`
 - Replaced inline `"idx:memories"` usage (8 occurrences in memory package) with `redis.IndexName`
 - Replaced provider name strings in `embedding/embedder.go`, `compressor/compressor.go`, and `config/config.go` validation with typed constants from `config/providers.go`
@@ -47,6 +50,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Renamed `mcp-register` to `mcp` and `mcp-register-global` to `mcp-global` for shorter CLI usage
 - Rewrote `docs/agent-instructions.md` with comprehensive tool documentation: parameter tables for all 8 tools, search mode tradeoffs, `forget`/`update_memory` workflows, dedicated `end_session` section, utility tools, and continuous usage pattern
 - README updated with both registration scopes (project-local vs global) in Quick Start, Claude Code section, and Development commands
+
+### Fixed
+
+- `list_projects` did not return projects that only had sessions but no stored memories; `SaveSession` now registers the project in the `projects` SET
+- `cleanupOrphans` removed projects from `projects` SET when they had 0 memories even if sessions still existed; now checks both `memCount == 0 AND sessCount == 0`
+- `CleanupOrphans` test ghost session used score `1.0` (oldest), causing `pruneSessions` to remove it before `cleanupOrphans` could detect it; fixed with a future timestamp score
 
 ## [Unreleased] - 2026-03-29 (Alessandro Bartoli)
 

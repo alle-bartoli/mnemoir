@@ -8,6 +8,7 @@ import (
 	"slices"
 	"sort"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/alle-bartoli/mnemoir/internal/redis"
@@ -96,34 +97,54 @@ func (s *Store) fullTextSearchRaw(ctx context.Context, query string, filters Sea
 }
 
 // HybridSearch combines vector and fulltext search with weighted scoring.
-// Runs both raw searches (no access tracking) with 2x the limit for better merge quality,
-// merges and deduplicates by memory ID, then tracks access once per unique result.
+// Runs both raw searches concurrently (no access tracking) with 2x the limit for better
+// merge quality, merges and deduplicates by memory ID, then tracks access once per unique result.
+//
+// Optimization: vector and FTS searches run in parallel goroutines. The embedding is computed
+// inside vectorSearchRaw, while FTS needs no embedding, so they are fully independent.
+// Latency drops from (embed + vector + fts) to (embed + max(vector, fts)).
 //
 // Default weights: 0.60 vector + 0.25 FTS + 0.15 importance (tunable via config).
 func (s *Store) HybridSearch(ctx context.Context, query string, filters SearchFilters, limit int) ([]SearchResult, error) {
 	fetchLimit := limit * 2
 
-	// Use raw methods to avoid double access-count increment on overlapping results
-	vectorResults, vecErr := s.vectorSearchRaw(ctx, query, filters, fetchLimit)
-	ftsResults, ftsErr := s.fullTextSearchRaw(ctx, query, filters, fetchLimit)
+	// Run vector and FTS searches concurrently, they share no state
+	type searchResult struct {
+		results []SearchResult
+		err     error
+	}
+	vecCh := make(chan searchResult, 1)
+	ftsCh := make(chan searchResult, 1)
+
+	go func() {
+		r, err := s.vectorSearchRaw(ctx, query, filters, fetchLimit)
+		vecCh <- searchResult{r, err}
+	}()
+	go func() {
+		r, err := s.fullTextSearchRaw(ctx, query, filters, fetchLimit)
+		ftsCh <- searchResult{r, err}
+	}()
+
+	vec := <-vecCh
+	fts := <-ftsCh
 
 	// Return whichever succeeds if one fails
-	if vecErr != nil && ftsErr != nil {
-		return nil, fmt.Errorf("both searches failed: vector=%w, fts=%v", vecErr, ftsErr)
+	if vec.err != nil && fts.err != nil {
+		return nil, fmt.Errorf("both searches failed: vector=%w, fts=%v", vec.err, fts.err)
 	}
-	if vecErr != nil {
-		results := truncate(ftsResults, limit)
+	if vec.err != nil {
+		results := truncate(fts.results, limit)
 		s.trackAccess(ctx, results)
 		return results, nil
 	}
-	if ftsErr != nil {
-		results := truncate(vectorResults, limit)
+	if fts.err != nil {
+		results := truncate(vec.results, limit)
 		s.trackAccess(ctx, results)
 		return results, nil
 	}
 
 	decayInterval, _ := s.memCfg.ParsedDecayInterval()
-	merged := mergeResults(vectorResults, ftsResults,
+	merged := mergeResults(vec.results, fts.results,
 		s.memCfg.VectorWeight, s.memCfg.FTSWeight, s.memCfg.ImportanceWeight,
 		s.memCfg.DecayFactor, decayInterval,
 		s.memCfg.AccessBoostFactor, s.memCfg.AccessBoostCap,
@@ -135,13 +156,31 @@ func (s *Store) HybridSearch(ctx context.Context, query string, filters SearchFi
 
 // PRIVATE
 
-// trackAccess increments access_count for each unique result.
+// trackAccess increments access_count for all results in a single Redis pipeline.
+// Previous implementation called UpdateAccess per result (N round-trips for N results).
+// Now pipelines all Lua script evaluations into one flush, reducing to 1 round-trip.
 // Errors are logged but do not fail the search - stale access counts are acceptable.
 func (s *Store) trackAccess(ctx context.Context, results []SearchResult) {
+	if len(results) == 0 {
+		return
+	}
+
+	decayInterval, _ := s.memCfg.ParsedDecayInterval()
+	now := time.Now().Unix()
+
+	pipe := s.rdb.Pipeline()
 	for _, r := range results {
-		if err := s.UpdateAccess(ctx, r.Memory.ID); err != nil {
-			slog.Warn("trackAccess failed", "memory_id", r.Memory.ID, "error", err)
-		}
+		key := redis.KeyPrefixMemory + r.Memory.ID
+		updateAccessScript.Run(ctx, pipe, []string{key},
+			s.memCfg.DecayFactor,
+			decayInterval.Seconds(),
+			s.memCfg.AccessBoostFactor,
+			s.memCfg.AccessBoostCap,
+			now,
+		)
+	}
+	if _, err := pipe.Exec(ctx); err != nil {
+		slog.Warn("trackAccess pipeline failed", "count", len(results), "error", err)
 	}
 }
 
@@ -149,7 +188,7 @@ func (s *Store) trackAccess(ctx context.Context, results []SearchResult) {
 // TAG filters use the syntax @field:{value} for exact match.
 // Returns "*" (match all) if no filters are set.
 func buildSearchFilter(filters SearchFilters) string {
-	parts := []string{}
+	parts := make([]string, 0, 2) // at most project + type filter
 	if filters.Project != "" {
 		parts = append(parts, fmt.Sprintf("@project:{%s}", escapeTag(filters.Project)))
 	}
@@ -159,14 +198,7 @@ func buildSearchFilter(filters SearchFilters) string {
 	if len(parts) == 0 {
 		return "*"
 	}
-	query := ""
-	for i, p := range parts {
-		if i > 0 {
-			query += " "
-		}
-		query += p
-	}
-	return query
+	return strings.Join(parts, " ")
 }
 
 // @dev buildFTSQuery builds a full-text search query string.
@@ -219,7 +251,7 @@ func extractSearchResults(res any) ([]SearchResult, error) {
 		return nil, nil
 	}
 
-	var results []SearchResult
+	results := make([]SearchResult, 0, len(entries))
 	for _, entry := range entries {
 		id := stripMemPrefix(getMapString(entry, "id"))
 		vals := getExtraAttributes(entry)
@@ -252,7 +284,7 @@ func extractFTSResults(res any) ([]SearchResult, error) {
 		return nil, nil
 	}
 
-	var results []SearchResult
+	results := make([]SearchResult, 0, len(entries))
 	for _, entry := range entries {
 		id := stripMemPrefix(getMapString(entry, "id"))
 		vals := getExtraAttributes(entry)
