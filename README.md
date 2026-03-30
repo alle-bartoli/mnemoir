@@ -34,16 +34,7 @@ make setup
 
 This starts Redis, builds the binary, copies config to `~/.mnemoir/config.toml`, registers the MCP server globally with Claude Code, installs the `SessionEnd` hook into `~/.claude/settings.json`, and adds agent instructions to `~/.claude/CLAUDE.md`.
 
-Optional API keys (not needed with default `local` providers):
-
-```bash
-export ANTHROPIC_API_KEY="sk-ant-..."     # Only for Claude compressor
-export OPENAI_API_KEY="sk-..."            # Only for OpenAI embeddings
-```
-
-## Other MCP Clients
-
-`make setup` registers with Claude Code. For other clients, add this to your MCP config:
+**Note**:`make setup` registers mnemoir for the CLI only. The Desktop app reads its own config file. Add mnemoir to `~/Library/Application Support/Claude/claude_desktop_config.json` (macOS) or `%APPDATA%\Claude\claude_desktop_config.json` (Windows):
 
 ```json
 {
@@ -57,7 +48,18 @@ export OPENAI_API_KEY="sk-..."            # Only for OpenAI embeddings
 }
 ```
 
+Optional API keys (not needed with default `local` providers):
+
+```bash
+export ANTHROPIC_API_KEY="sk-ant-..."     # Only for Claude compressor
+export OPENAI_API_KEY="sk-..."            # Only for OpenAI embeddings
+```
+
 Replace `/path/to/bin/mnemoir` with the actual binary path (`which mnemoir` after `make install`, or `$(pwd)/bin/mnemoir` for local builds).
+
+## Other MCP Clients
+
+For clients other than Claude Code, add the same JSON block above to your MCP config file.
 
 Works with: Cursor, Windsurf, Continue.dev, Cline, Zed.
 
