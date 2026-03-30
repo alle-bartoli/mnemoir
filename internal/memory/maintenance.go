@@ -230,12 +230,16 @@ func (s *Store) cleanupOrphans(ctx context.Context, project string) (bool, error
 		}
 	}
 
-	// 2. Remove project from SET if it has 0 memories
+	// 2. Remove project from SET if it has 0 memories AND 0 sessions
 	memCount, err := s.CountByProject(ctx, project)
 	if err != nil {
 		return cleaned, fmt.Errorf("count for orphan check: %w", err)
 	}
-	if memCount == 0 {
+	sessCount, err := s.rdb.ZCard(ctx, setKey).Result()
+	if err != nil {
+		return cleaned, fmt.Errorf("zcard for orphan check: %w", err)
+	}
+	if memCount == 0 && sessCount == 0 {
 		if err := s.rdb.SRem(ctx, redis.KeyProjects, project).Err(); err != nil {
 			return cleaned, fmt.Errorf("srem orphan project: %w", err)
 		}

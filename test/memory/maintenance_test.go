@@ -182,9 +182,10 @@ func TestMaintenance(t *testing.T) {
 	})
 
 	t.Run("CleanupOrphans", func(t *testing.T) {
-		// Add a stale sorted set entry pointing to a non-existent session
+		// Add a stale sorted set entry pointing to a non-existent session.
+		// Use a high score so pruneSessions keeps it (it prunes oldest first).
 		rdb.ZAdd(ctx, redisclient.KeyPrefixProjectSessions+maintProject, goredis.Z{
-			Score:  1.0,
+			Score:  float64(time.Now().Unix() + 9999),
 			Member: "test-maint-ghost",
 		})
 

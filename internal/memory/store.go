@@ -340,6 +340,8 @@ func (s *Store) SaveSession(ctx context.Context, sess *Session) error {
 		Score:  float64(sess.StartedAt),
 		Member: sess.ID,
 	})
+	// Register project so list_projects sees it even without stored memories
+	pipe.SAdd(ctx, redis.KeyProjects, sess.Project)
 	if _, err := pipe.Exec(ctx); err != nil {
 		return fmt.Errorf("save session %s: %w", sess.ID, err)
 	}

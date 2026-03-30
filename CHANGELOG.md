@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased] - 2026-03-30 (Alessandro Bartoli)
 
+### Fixed
+
+- `list_projects` did not return projects that only had sessions but no stored memories; `SaveSession` now registers the project in the `projects` SET
+- `cleanupOrphans` removed projects from `projects` SET when they had 0 memories even if sessions still existed; now checks both `memCount == 0 AND sessCount == 0`
+- `CleanupOrphans` test ghost session used score `1.0` (oldest), causing `pruneSessions` to remove it before `cleanupOrphans` could detect it; fixed with a future timestamp score
+
 ### Added
 
 - `internal/redis/keys.go`: centralized Redis key prefix constants (`KeyPrefixMemory`, `KeyPrefixSession`, `KeyPrefixProjectSessions`, `KeyProjects`, `KeyPrefixMaintLastRun`, `KeyTagFrequency`)
