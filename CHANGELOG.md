@@ -5,6 +5,15 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased] - 2026-04-01 (Alessandro Bartoli)
+
+### Changed
+
+- Renamed `make instructions` to `make specs`; now installs to `~/.claude/memory/reference_mnemoir.md` (Claude Code auto-memory) instead of injecting into `~/.claude/CLAUDE.md`; adds a minimal behavioral pointer in `CLAUDE.md` and an index entry in `MEMORY.md`
+- Renamed `scripts/install-instructions.sh` to `scripts/install-specs.sh`: writes memory file with frontmatter, adds pointer section in `CLAUDE.md`, adds index entry in `MEMORY.md`
+- Renamed `scripts/uninstall-instructions.sh` to `scripts/uninstall-specs.sh`: removes memory file, `CLAUDE.md` pointer, and `MEMORY.md` index entry
+- Renamed `docs/agent-instructions.md` to `docs/agent-specs.md`; preamble updated to document new installation target
+
 ## [Unreleased] - 2026-03-30 (Alessandro Bartoli)
 
 ### Added

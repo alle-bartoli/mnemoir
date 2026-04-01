@@ -1,4 +1,19 @@
-.PHONY: help build install uninstall test docker-up docker-down redis-ui setup mcp mcp-global hook instructions clean clean-data
+.PHONY: \
+	help \
+	build \
+	install \
+	uninstall \
+	test \
+	docker-up \
+	docker-down \
+	redis-ui \
+	setup \
+	mcp \
+	mcp-global \
+	hook \
+	specs \
+	clean \
+	clean-data
 
 # Load .env if present so env-var checks work without manual export
 -include .env
@@ -23,7 +38,7 @@ help:
 	@echo "  make mcp           - Register MCP server with Claude Code (project-local)"
 	@echo "  make mcp-global    - Register MCP server globally (all projects)"
 	@echo "  make hook          - Install Claude Code SessionEnd hook"
-	@echo "  make instructions  - Install agent instructions into ~/.claude/CLAUDE.md"
+	@echo "  make specs         - Install agent specs into ~/.claude/memory/"
 	@echo "  make clean         - Remove build artifacts"
 	@echo "  make clean-data    - Stop Redis and wipe all stored memories (data/)"
 
@@ -40,8 +55,8 @@ uninstall:
 	-claude mcp remove $(BINARY) 2>/dev/null
 	@echo "Removing SessionEnd hook..."
 	-$(CURDIR)/scripts/uninstall-hook.sh 2>/dev/null
-	@echo "Removing agent instructions from CLAUDE.md..."
-	-$(CURDIR)/scripts/uninstall-instructions.sh 2>/dev/null
+	@echo "Removing agent specs from CLAUDE.md..."
+	-$(CURDIR)/scripts/uninstall-specs.sh 2>/dev/null
 	@echo "Removing config directory $(CONFIG_DIR)..."
 	rm -rf $(CONFIG_DIR)
 	@echo "Removing build artifacts..."
@@ -80,16 +95,16 @@ setup: docker-up build
 	@echo "Installing SessionEnd hook..."
 	@$(MAKE) --no-print-directory hook
 	@echo ""
-	@echo "Installing agent instructions..."
-	@$(MAKE) --no-print-directory instructions
+	@echo "Installing agent specs..."
+	@$(MAKE) --no-print-directory specs
 	@echo ""
 	@echo "Setup complete. Edit $(CONFIG_DIR)/config.toml to customize."
 
 hook:
 	@$(CURDIR)/scripts/install-hook.sh $(CURDIR)/scripts/session-end-hook.sh
 
-instructions:
-	@$(CURDIR)/scripts/install-instructions.sh $(CURDIR)/docs/agent-instructions.md
+specs:
+	@$(CURDIR)/scripts/install-specs.sh $(CURDIR)/docs/agent-specs.md
 
 mcp: build
 	@if [ -z "$$MNEMOIR_REDIS_PASSWORD" ]; then \

@@ -1,6 +1,13 @@
-# Agent Instructions
+# Agent Specs
 
-Copy the block below into your project's `CLAUDE.md` (or equivalent system prompt for other agents) to teach the agent how to use mnemoir.
+Ready-to-install specs that teach AI agents how to use mnemoir.
+
+**Installation target**: `~/.claude/memory/reference_mnemoir.md` (Claude Code auto-memory file).
+A minimal behavioral pointer is also added to `~/.claude/CLAUDE.md`.
+
+Run `make specs` to install, or `make setup` for full installation.
+
+For non-Claude Code agents, copy the content below the `---` separator into your agent's system prompt.
 
 ---
 

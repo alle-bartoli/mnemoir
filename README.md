@@ -28,11 +28,11 @@ Fully offline-capable, no API keys required.
 # Set Redis password
 export MNEMOIR_REDIS_PASSWORD="your-secret"
 
-# Full install: docker + build + config + MCP + hook + agent instructions
+# Full install: docker + build + config + MCP + hook + agent specs
 make setup
 ```
 
-This starts Redis, builds the binary, copies config to `~/.mnemoir/config.toml`, registers the MCP server globally with Claude Code, installs the `SessionEnd` hook into `~/.claude/settings.json`, and adds agent instructions to `~/.claude/CLAUDE.md`.
+This starts Redis, builds the binary, copies config to `~/.mnemoir/config.toml`, registers the MCP server globally with Claude Code, installs the `SessionEnd` hook into `~/.claude/settings.json`, and installs agent specs to `~/.claude/memory/reference_mnemoir.md` with a minimal pointer in `~/.claude/CLAUDE.md`.
 
 **Note**:`make setup` registers mnemoir for the CLI only. The Desktop app reads its own config file. Add mnemoir to `~/Library/Application Support/Claude/claude_desktop_config.json` (macOS) or `%APPDATA%\Claude\claude_desktop_config.json` (Windows):
 
@@ -83,7 +83,7 @@ See `~/.mnemoir/config.toml` for all options with inline comments.
 
 ```bash
 make help           # Show all targets
-make setup          # Full install (docker + build + config + MCP + hook + instructions)
+make setup          # Full install (docker + build + config + MCP + hook + specs)
 make build          # Build binary
 make test           # Run tests
 make docker-up      # Start Redis Stack
@@ -92,18 +92,18 @@ make redis-ui       # Open RedisInsight (http://localhost:8001)
 make mcp            # Register MCP (project-local)
 make mcp-global     # Register MCP (all projects)
 make hook           # Install SessionEnd hook
-make instructions   # Install agent instructions into ~/.claude/CLAUDE.md
+make specs          # Install agent specs into ~/.claude/memory/
 make clean          # Remove build artifacts
 make clean-data     # Stop Redis + wipe data/
 make install        # Install to $GOPATH/bin
-make uninstall      # Remove everything (binary, MCP, config, hook, instructions)
+make uninstall      # Remove everything (binary, MCP, config, hook, specs)
 ```
 
 Redis data persists in `./data/` (gitignored, capped at 512MB). Run `make clean-data` to reclaim disk space.
 
-## Agent Instructions
+## Agent Specs
 
-See [docs/agent-instructions.md](docs/agent-instructions.md) for the ready-to-copy prompt block that teaches agents how to use mnemoir. Installed automatically by `make setup` into `~/.claude/CLAUDE.md`.
+See [docs/agent-specs.md](docs/agent-specs.md) for the ready-to-copy prompt block that teaches agents how to use mnemoir. Installed automatically by `make setup` into `~/.claude/memory/reference_mnemoir.md` (Claude Code auto-memory), with a minimal behavioral pointer in `~/.claude/CLAUDE.md`.
 
 ## TODO
 
