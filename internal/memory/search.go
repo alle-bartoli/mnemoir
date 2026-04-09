@@ -171,7 +171,14 @@ func (s *Store) trackAccess(ctx context.Context, results []SearchResult) {
 	pipe := s.rdb.Pipeline()
 	for _, r := range results {
 		key := redis.KeyPrefixMemory + r.Memory.ID
-		updateAccessScript.Run(ctx, pipe, []string{key},
+		// Use Eval (full script body) instead of Run (EVALSHA with fallback)
+		// because Run's NOSCRIPT -> EVAL fallback cannot fire mid-pipeline:
+		// the batch is sent in one shot with no per-command retry, so a cold
+		// Redis (fresh container, SCRIPT FLUSH, failover) would lose every
+		// access-count update in the batch. Eval always ships the source;
+		// Redis caches it after first execution, and the extra bandwidth is
+		// negligible for fire-and-forget post-search tracking.
+		updateAccessScript.Eval(ctx, pipe, []string{key},
 			s.memCfg.DecayFactor,
 			decayInterval.Seconds(),
 			s.memCfg.AccessBoostFactor,
