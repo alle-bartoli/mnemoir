@@ -5,6 +5,25 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased] - 2026-04-09 (Alessandro Bartoli)
+
+> **Verification branch `verify/gomlx-simplego-race-pr393` — DO NOT MERGE.**
+> Pins `gomlx`, `onnx-gomlx`, and `go-huggingface` to `@main` via `replace`
+> directives to verify the `executeParallel` race fix from
+> [gomlx/gomlx#393](https://github.com/gomlx/gomlx/pull/393) against mnemoir's
+> embedder workload. Revert this section and the `replace` directives once
+> `gomlx v0.27.3` (or newer) is released and `hugot` bumps to it.
+
+### Changed
+
+- Bumped `github.com/knights-analytics/hugot` from `v0.6.2` to `v0.7.0` (direct dep); pulls in the `gomlx v0.27.2` baseline plus the `gomlx-tokenizers` migration, transparent to mnemoir
+- `go.mod` `replace` directives added for `github.com/gomlx/gomlx`, `github.com/gomlx/onnx-gomlx`, and `github.com/gomlx/go-huggingface`, all pointing to `@main`, so the build picks up the post-PR #393 tree
+- `internal/embedding/local.go`: `FeatureExtractionConfig` now sets `OnnxFilename: "onnx/model.onnx"` explicitly; required by the hugot v0.7.0 API (`backends.PipelineConfig[T]` exposes `OnnxFilename` as a first-class field)
+
+### Verified
+
+- `go test -race ./test/embedding/... ./test/memory/...` produces no `WARNING: DATA RACE` on the `HybridSearch` → `LocalEmbedder.Embed` fan-out path; gomlx PR #393 resolves [gomlx/gomlx#387](https://github.com/gomlx/gomlx/issues/387) for mnemoir's workload
+
 ## [Unreleased] - 2026-04-01 (Alessandro Bartoli)
 
 ### Changed

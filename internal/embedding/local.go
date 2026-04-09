@@ -14,6 +14,7 @@ import (
 )
 
 const localDefaultDimension = 384
+const OnnxFilePath = "onnx/model.onnx"
 
 // LocalEmbedder runs ONNX models locally via hugot (pure Go, no CGO).
 // The hugot pipeline is NOT goroutine-safe (data race in gomlx backend),
@@ -46,7 +47,7 @@ func NewLocalEmbedder(cfg config.EmbeddingLocalConfig, dimension int) (*LocalEmb
 	}
 
 	dlOpts := hugot.NewDownloadOptions()
-	dlOpts.OnnxFilePath = "onnx/model.onnx"
+	dlOpts.OnnxFilePath = OnnxFilePath
 	modelPath, err := hugot.DownloadModel(model, modelDir, dlOpts)
 	if err != nil {
 		_ = session.Destroy()
@@ -54,8 +55,9 @@ func NewLocalEmbedder(cfg config.EmbeddingLocalConfig, dimension int) (*LocalEmb
 	}
 
 	feConfig := hugot.FeatureExtractionConfig{
-		ModelPath: modelPath,
-		Name:      "embedding",
+		ModelPath:    modelPath,
+		Name:         "embedding",
+		OnnxFilename: OnnxFilePath,
 	}
 	pipeline, err := hugot.NewPipeline(session, feConfig)
 	if err != nil {
