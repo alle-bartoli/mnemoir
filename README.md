@@ -79,6 +79,50 @@ Edit `~/.mnemoir/config.toml`. Key settings:
 
 See `~/.mnemoir/config.toml` for all options with inline comments.
 
+## How Scoring Works
+
+`recall` uses **hybrid search** by default: vector (semantic) and full-text (keyword) run in parallel, then results merge into a single ranked list.
+
+### Hybrid merge formula
+
+Each signal is normalized to [0, 1] then weighted:
+
+```
+final_score = (vec_score / max_vec)  * vector_weight       # default 0.60
+            + (fts_score / max_fts)  * fts_weight          # default 0.25
+            + (eff_importance / 10)  * importance_weight   # default 0.15
+```
+
+- **Vector score**: cosine similarity (`1.0 - cosine_distance`), via HNSW index.
+- **FTS score**: RediSearch TF-IDF, normalized against the max score in the result set.
+- **Effective importance**: see below.
+
+If a memory appears in both vector and FTS results, its weighted scores are summed (deduplication by ID).
+
+### Effective importance
+
+Importance decays over time and gets boosted by recall frequency:
+
+```
+decayed   = importance * decay_factor ^ (time_since_access / decay_interval)
+boost     = min(access_boost_cap, access_count * access_boost_factor)
+effective = clamp(1.0, 10.0, decayed + boost)
+```
+
+Defaults: `decay_factor=0.9`, `decay_interval=7d`, `access_boost_factor=0.3`, `access_boost_cap=2.0`.
+
+Example: importance 8, not accessed for 30 days, accessed 3 times:
+
+- `decayed = 8 * 0.9^4.3 ≈ 4.2`
+- `boost = min(2.0, 3 * 0.3) = 0.9`
+- `effective = 5.1`
+
+### Auto-forget
+
+Maintenance runs periodically (default: once per hour per project).
+Memories with `effective_importance <= 2.0` AND not accessed in 90+ days are automatically deleted.
+Both thresholds are configurable via `maintenance.forget_threshold` and `maintenance.forget_inactive_days`.
+
 ## Development
 
 ```bash
