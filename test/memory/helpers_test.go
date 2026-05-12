@@ -16,8 +16,10 @@ import (
 )
 
 const (
-	testProject       = "test-store"
-	searchTestProject = "test-search"
+	testProject        = "test-store"
+	searchTestProject  = "test-search"
+	renameSrcProject   = "test-rename-src"
+	renameDstProject   = "test-rename-dst"
 )
 
 // redisPassword reads MNEMOIR_REDIS_PASSWORD from env, falling back to .env file at project root.
@@ -157,6 +159,46 @@ func newSearchTestStore(t *testing.T) (*memory.Store, *goredis.Client) {
 	})
 
 	return store, rdb
+}
+
+// newRenameTestStore creates a Store for rename tests with isolated cleanup
+// for renameSrcProject and renameDstProject.
+func newRenameTestStore(t *testing.T) *memory.Store {
+	t.Helper()
+
+	rdb := newRedisClient()
+	ctx := context.Background()
+	if err := rdb.Ping(ctx).Err(); err != nil {
+		t.Skipf("Redis not available: %v", err)
+	}
+
+	emb, err := embedding.NewLocalEmbedder(config.EmbeddingLocalConfig{
+		Model:    "sentence-transformers/all-MiniLM-L6-v2",
+		ModelDir: "~/.mnemoir/models",
+	}, 384)
+	if err != nil {
+		t.Fatalf("NewLocalEmbedder: %v", err)
+	}
+
+	store := memory.NewStore(rdb, emb, defaultMemCfg)
+
+	t.Cleanup(func() {
+		keys, _ := rdb.Keys(ctx, redisclient.KeyPrefixMemory+"test-rename-*").Result()
+		if len(keys) > 0 {
+			rdb.Del(ctx, keys...)
+		}
+		sessKeys, _ := rdb.Keys(ctx, redisclient.KeyPrefixSession+"test-rename-*").Result()
+		if len(sessKeys) > 0 {
+			rdb.Del(ctx, sessKeys...)
+		}
+		rdb.Del(ctx, redisclient.KeyPrefixProjectSessions+renameSrcProject)
+		rdb.Del(ctx, redisclient.KeyPrefixProjectSessions+renameDstProject)
+		rdb.SRem(ctx, redisclient.KeyProjects, renameSrcProject, renameDstProject)
+		_ = emb.Close()
+		_ = rdb.Close()
+	})
+
+	return store
 }
 
 func newTestMemory(id, content string, memType memory.MemoryType) *memory.Memory {

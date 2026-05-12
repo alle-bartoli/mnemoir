@@ -72,7 +72,7 @@ func TestVectorSearch(t *testing.T) {
 	t.Run("TypeFilter", func(t *testing.T) {
 		store, _ := newSearchTestStore(t)
 		ctx := context.Background()
-		filters := memory.SearchFilters{Project: searchTestProject, Type: "concept"}
+		filters := memory.SearchFilters{Project: searchTestProject, Type: string(memory.Concept)}
 
 		results, err := store.VectorSearch(ctx, "search algorithms", filters, 5)
 		if err != nil {

@@ -27,6 +27,7 @@ func EnsureIndex(ctx context.Context, c *Client, dimension int) error {
 }
 
 func createIndex(ctx context.Context, c *Client, dimension int) error {
+	// NOTE: Field names must match the constants in internal/memory/fields.go.
 	args := []any{
 		IndexName, "ON", "HASH", "PREFIX", "1", KeyPrefixMemory,
 		"SCHEMA",

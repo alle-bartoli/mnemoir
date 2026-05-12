@@ -5,6 +5,51 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased] - 2026-05-12 (Alessandro Bartoli)
+
+### Added
+
+- **`rename_project` MCP tool**: migrates all memories, sessions, and project-set
+  entries from an old project name to a new one
+  - `Store.RenameProject`: batch-updates `project` field on all memory hashes via
+    `FT.SEARCH` (batches of 1000), migrates `project_sessions:{old}` sorted set,
+    updates `projects` SET atomically
+  - Handler validates `new_name` against the TAG allowlist; rejects same-name renames
+  - Returns `memories_updated` and `sessions_updated` counts
+- **`internal/memory/fields.go`**: centralized Redis hash field name constants
+  - Memory fields: `FieldContent`, `FieldType`, `FieldProject`, `FieldTags`,
+    `FieldImportance`, `FieldSessionID`, `FieldCreatedAt`, `FieldLastAccessed`,
+    `FieldAccessCount`, `FieldEmbedding`
+  - Session fields: `FieldStartedAt`, `FieldEndedAt`, `FieldSummary`, `FieldMemoryCount`
+  - Values must match schema in `internal/redis/schema.go` (comment added there)
+- **`internal/mcp/tools.go`**: centralized MCP tool registry
+  - `toolDef` struct wrapping name, `[]mcp.ToolOption`, and handler
+  - `toolDefs(h)` returns the full declarative tool dictionary
+  - Tool name constants (`toolStoreMemory`, `toolRecall`, etc.)
+  - Parameter and response field name constants (`paramContent`, `paramProject`,
+    `paramImportance`, `paramScore`, `paramSessionID`, `paramMemoryCount`, etc.)
+- **`TestRenameProject`**: integration test verifying memory migration, session
+  migration, and projects SET update after rename
+- **`newRenameTestStore`** helper and `renameSrcProject`/`renameDstProject`
+  constants in `test/memory/helpers_test.go`
+
+### Changed
+
+- **`store.go`**: replaced all Redis hash field string literals with `Field*`
+  constants from `internal/memory/fields.go`
+  - Covers `Save`, `Update`, `RenameProject`, `SaveSession`, `hashToMemory`,
+    `hashToSession`, `getStatsLegacy`, `parseAggregateStats`, `computeStats`,
+    `CountAllByProject`, `GetTopMemories`
+- **`handlers.go`**: replaced all MCP param/response string literals with
+  `param*` constants from `tools.go`
+  - Covers all tool handlers and `HandleEndSession` HTTP bridge
+- **`server.go`**: `registerTools` refactored to a 3-line loop over `toolDefs`
+- **`internal/compressor/local.go`**: replaced `"fact"`, `"concept"`,
+  `"narrative"` string literals with `memory.Fact`, `memory.Concept`,
+  `memory.Narrative`
+- **Tests**: updated to use `memory.Field*` and `memory.Fact/Concept/Narrative`
+  typed constants instead of raw string literals
+
 ## [Unreleased] - 2026-04-09 (Alessandro Bartoli)
 
 ### Fixed

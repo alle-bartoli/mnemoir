@@ -8,6 +8,8 @@ import (
 	"strings"
 	"unicode"
 
+	"github.com/alle-bartoli/mnemoir/internal/memory"
+
 	rediskeys "github.com/alle-bartoli/mnemoir/internal/redis"
 	"github.com/redis/go-redis/v9"
 )
@@ -68,13 +70,13 @@ func (c *LocalCompressor) Compress(ctx context.Context, observations string) (*C
 		tagStr := strings.Join(tags, ",")
 
 		switch classifySentence(s) {
-		case "fact":
+		case string(memory.Fact):
 			result.Facts = append(result.Facts, ExtractedMemory{
 				Content:    s,
 				Tags:       tagStr,
 				Importance: scoreFact(s),
 			})
-		case "concept":
+		case string(memory.Concept):
 			result.Concepts = append(result.Concepts, ExtractedMemory{
 				Content:    s,
 				Tags:       tagStr,
