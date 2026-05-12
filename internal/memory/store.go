@@ -50,16 +50,16 @@ func (s *Store) Save(ctx context.Context, mem *Memory) error {
 
 	key := redis.KeyPrefixMemory + mem.ID
 	fields := map[string]any{
-		"content":       mem.Content,
-		"type":          string(mem.Type),
-		"project":       mem.Project,
-		"tags":          mem.Tags,
-		"importance":    mem.Importance,
-		"session_id":    mem.SessionID,
-		"created_at":    mem.CreatedAt,
-		"last_accessed": mem.LastAccessed,
-		"access_count":  mem.AccessCount,
-		"embedding":     float32ToBytes(emb),
+		FieldContent:      mem.Content,
+		FieldType:         string(mem.Type),
+		FieldProject:      mem.Project,
+		FieldTags:         mem.Tags,
+		FieldImportance:   mem.Importance,
+		FieldSessionID:    mem.SessionID,
+		FieldCreatedAt:    mem.CreatedAt,
+		FieldLastAccessed: mem.LastAccessed,
+		FieldAccessCount:  mem.AccessCount,
+		FieldEmbedding:    float32ToBytes(emb),
 	}
 
 	pipe := s.rdb.Pipeline()
@@ -214,12 +214,12 @@ func (s *Store) Update(ctx context.Context, id string, fields map[string]any) er
 		return fmt.Errorf("memory %s not found", id)
 	}
 
-	if content, ok := fields["content"].(string); ok && content != "" {
+	if content, ok := fields[FieldContent].(string); ok && content != "" {
 		emb, err := s.embedder.Embed(ctx, content)
 		if err != nil {
 			return fmt.Errorf("regenerate embedding: %w", err)
 		}
-		fields["embedding"] = float32ToBytes(emb)
+		fields[FieldEmbedding] = float32ToBytes(emb)
 	}
 
 	if err := s.rdb.HSet(ctx, key, fields).Err(); err != nil {
@@ -231,6 +231,69 @@ func (s *Store) Update(ctx context.Context, id string, fields map[string]any) er
 // ListProjects returns all known project names.
 func (s *Store) ListProjects(ctx context.Context) ([]string, error) {
 	return s.rdb.SMembers(ctx, redis.KeyProjects).Result()
+}
+
+// RenameProject migrates all memories and sessions from oldName to newName,
+// then updates the projects set. Returns counts of updated memories and sessions.
+func (s *Store) RenameProject(ctx context.Context, oldName, newName string) (int, int, error) {
+	query := fmt.Sprintf("@project:{%s}", escapeTag(oldName))
+	totalMemories := 0
+
+	const maxIterations = 100
+	for i := 0; i < maxIterations; i++ {
+		args := []any{"FT.SEARCH", redis.IndexName, query, "NOCONTENT", "LIMIT", 0, 1000}
+		res, err := s.rdb.Do(ctx, args...).Result()
+		if err != nil {
+			return totalMemories, 0, fmt.Errorf("search memories for rename: %w", err)
+		}
+
+		ids := extractIDsFromSearch(res)
+		if len(ids) == 0 {
+			break
+		}
+
+		pipe := s.rdb.Pipeline()
+		for _, id := range ids {
+			pipe.HSet(ctx, id, FieldProject, newName)
+		}
+		if _, err := pipe.Exec(ctx); err != nil {
+			return totalMemories, 0, fmt.Errorf("update memory projects: %w", err)
+		}
+		totalMemories += len(ids)
+	}
+
+	oldSessionsKey := redis.KeyPrefixProjectSessions + oldName
+	newSessionsKey := redis.KeyPrefixProjectSessions + newName
+
+	sessionEntries, err := s.rdb.ZRangeWithScores(ctx, oldSessionsKey, 0, -1).Result()
+	if err != nil {
+		return totalMemories, 0, fmt.Errorf("get sessions for rename: %w", err)
+	}
+
+	totalSessions := len(sessionEntries)
+	if totalSessions > 0 {
+		newMembers := make([]goredis.Z, 0, totalSessions)
+		pipe := s.rdb.Pipeline()
+		for _, entry := range sessionEntries {
+			sessionID, _ := entry.Member.(string)
+			pipe.HSet(ctx, redis.KeyPrefixSession+sessionID, FieldProject, newName)
+			newMembers = append(newMembers, goredis.Z{Score: entry.Score, Member: sessionID})
+		}
+		pipe.ZAdd(ctx, newSessionsKey, newMembers...)
+		pipe.Del(ctx, oldSessionsKey)
+		if _, err := pipe.Exec(ctx); err != nil {
+			return totalMemories, totalSessions, fmt.Errorf("update sessions for rename: %w", err)
+		}
+	}
+
+	pipe := s.rdb.Pipeline()
+	pipe.SRem(ctx, redis.KeyProjects, oldName)
+	pipe.SAdd(ctx, redis.KeyProjects, newName)
+	if _, err := pipe.Exec(ctx); err != nil {
+		return totalMemories, totalSessions, fmt.Errorf("update projects set for rename: %w", err)
+	}
+
+	return totalMemories, totalSessions, nil
 }
 
 // CountByProject returns the number of memories for a project.
@@ -263,7 +326,7 @@ func (s *Store) CountAllByProject(ctx context.Context) (map[string]int, error) {
 	entries := getResultEntries(res)
 	for _, entry := range entries {
 		attrs := getExtraAttributes(entry)
-		project := attrs["project"]
+		project := attrs[FieldProject]
 		count, _ := strconv.Atoi(attrs["count"])
 		if project != "" {
 			counts[project] = count
@@ -301,7 +364,7 @@ func (s *Store) GetStats(ctx context.Context, project string) (*MemoryStats, err
 func (s *Store) getStatsLegacy(ctx context.Context, query string) (*MemoryStats, error) {
 	res, err := s.rdb.Do(ctx,
 		"FT.SEARCH", redis.IndexName, query,
-		"RETURN", "3", "type", "importance", "created_at",
+		"RETURN", "3", FieldType, FieldImportance, FieldCreatedAt,
 		"LIMIT", 0, 10000,
 	).Result()
 	if err != nil {
@@ -322,7 +385,7 @@ func parseAggregateStats(res any) (*MemoryStats, error) {
 
 	for _, entry := range entries {
 		attrs := getExtraAttributes(entry)
-		typeName := attrs["type"]
+		typeName := attrs[FieldType]
 		count, _ := strconv.Atoi(attrs["count"])
 		avgImp, _ := strconv.ParseFloat(attrs["avg_imp"], 64)
 		oldest, _ := strconv.ParseInt(attrs["oldest"], 10, 64)
@@ -355,11 +418,11 @@ func parseAggregateStats(res any) (*MemoryStats, error) {
 func (s *Store) SaveSession(ctx context.Context, sess *Session) error {
 	key := redis.KeyPrefixSession + sess.ID
 	fields := map[string]any{
-		"project":      sess.Project,
-		"started_at":   sess.StartedAt,
-		"ended_at":     sess.EndedAt,
-		"summary":      sess.Summary,
-		"memory_count": sess.MemoryCount,
+		FieldProject:     sess.Project,
+		FieldStartedAt:   sess.StartedAt,
+		FieldEndedAt:     sess.EndedAt,
+		FieldSummary:     sess.Summary,
+		FieldMemoryCount: sess.MemoryCount,
 	}
 
 	pipe := s.rdb.Pipeline()
@@ -406,7 +469,7 @@ func (s *Store) GetTopMemories(ctx context.Context, project string, limit int) (
 	query := fmt.Sprintf("@project:{%s}", escapeTag(project))
 	res, err := s.rdb.Do(ctx,
 		"FT.SEARCH", redis.IndexName, query,
-		"SORTBY", "importance", "DESC",
+		"SORTBY", FieldImportance, "DESC",
 		"LIMIT", 0, limit,
 	).Result()
 	if err != nil {
@@ -439,19 +502,19 @@ func float32ToBytes(v []float32) []byte {
 }
 
 func hashToMemory(id string, vals map[string]string) (*Memory, error) {
-	importance, _ := strconv.Atoi(vals["importance"])
-	createdAt, _ := strconv.ParseInt(vals["created_at"], 10, 64)
-	lastAccessed, _ := strconv.ParseInt(vals["last_accessed"], 10, 64)
-	accessCount, _ := strconv.Atoi(vals["access_count"])
+	importance, _ := strconv.Atoi(vals[FieldImportance])
+	createdAt, _ := strconv.ParseInt(vals[FieldCreatedAt], 10, 64)
+	lastAccessed, _ := strconv.ParseInt(vals[FieldLastAccessed], 10, 64)
+	accessCount, _ := strconv.Atoi(vals[FieldAccessCount])
 
 	return &Memory{
 		ID:           id,
-		Content:      vals["content"],
-		Type:         MemoryType(vals["type"]),
-		Project:      vals["project"],
-		Tags:         vals["tags"],
+		Content:      vals[FieldContent],
+		Type:         MemoryType(vals[FieldType]),
+		Project:      vals[FieldProject],
+		Tags:         vals[FieldTags],
 		Importance:   importance,
-		SessionID:    vals["session_id"],
+		SessionID:    vals[FieldSessionID],
 		CreatedAt:    createdAt,
 		LastAccessed: lastAccessed,
 		AccessCount:  accessCount,
@@ -462,16 +525,16 @@ func hashToSession(key string, vals map[string]string) *Session {
 	// Extract ID from key "session:ULID"
 	id := strings.TrimPrefix(key, redis.KeyPrefixSession)
 
-	startedAt, _ := strconv.ParseInt(vals["started_at"], 10, 64)
-	endedAt, _ := strconv.ParseInt(vals["ended_at"], 10, 64)
-	memCount, _ := strconv.Atoi(vals["memory_count"])
+	startedAt, _ := strconv.ParseInt(vals[FieldStartedAt], 10, 64)
+	endedAt, _ := strconv.ParseInt(vals[FieldEndedAt], 10, 64)
+	memCount, _ := strconv.Atoi(vals[FieldMemoryCount])
 
 	return &Session{
 		ID:          id,
-		Project:     vals["project"],
+		Project:     vals[FieldProject],
 		StartedAt:   startedAt,
 		EndedAt:     endedAt,
-		Summary:     vals["summary"],
+		Summary:     vals[FieldSummary],
 		MemoryCount: memCount,
 	}
 }
@@ -575,13 +638,13 @@ func computeStats(res any) (*MemoryStats, error) {
 	for _, entry := range entries {
 		vals := getExtraAttributes(entry)
 
-		if t := vals["type"]; t != "" {
+		if t := vals[FieldType]; t != "" {
 			stats.ByType[t]++
 		}
-		if imp, err := strconv.Atoi(vals["importance"]); err == nil {
+		if imp, err := strconv.Atoi(vals[FieldImportance]); err == nil {
 			sumImportance += imp
 		}
-		if ca, err := strconv.ParseInt(vals["created_at"], 10, 64); err == nil {
+		if ca, err := strconv.ParseInt(vals[FieldCreatedAt], 10, 64); err == nil {
 			if oldest == 0 || ca < oldest {
 				oldest = ca
 			}

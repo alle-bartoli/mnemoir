@@ -63,15 +63,15 @@ type Handlers struct {
 
 // StoreMemory handles the store_memory tool.
 func (h *Handlers) StoreMemory(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-	content, err := req.RequireString("content")
+	content, err := req.RequireString(paramContent)
 	if err != nil {
 		return mcp.NewToolResultError("content is required"), nil
 	}
-	if err := validateLength("content", content, maxContentLen); err != nil {
+	if err := validateLength(paramContent, content, maxContentLen); err != nil {
 		return mcp.NewToolResultError(err.Error()), nil
 	}
 
-	memType, err := req.RequireString("type")
+	memType, err := req.RequireString(paramType)
 	if err != nil {
 		return mcp.NewToolResultError("type is required"), nil
 	}
@@ -80,27 +80,27 @@ func (h *Handlers) StoreMemory(ctx context.Context, req mcp.CallToolRequest) (*m
 		return mcp.NewToolResultError("type must be one of: fact, concept, narrative"), nil
 	}
 
-	project, err := req.RequireString("project")
+	project, err := req.RequireString(paramProject)
 	if err != nil {
 		return mcp.NewToolResultError("project is required"), nil
 	}
 	if err := memory.ValidateTagValue(project); err != nil {
 		return mcp.NewToolResultError(err.Error()), nil
 	}
-	if err := validateLength("project", project, maxProjectLen); err != nil {
+	if err := validateLength(paramProject, project, maxProjectLen); err != nil {
 		return mcp.NewToolResultError(err.Error()), nil
 	}
 
-	tags := req.GetString("tags", "")
+	tags := req.GetString(paramTags, "")
 	if tags != "" {
-		if err := validateLength("tags", tags, maxTagsLen); err != nil {
+		if err := validateLength(paramTags, tags, maxTagsLen); err != nil {
 			return mcp.NewToolResultError(err.Error()), nil
 		}
 		if err := validateTags(tags); err != nil {
 			return mcp.NewToolResultError(err.Error()), nil
 		}
 	}
-	importance := req.GetInt("importance", h.cfg.Memory.DefaultImportance)
+	importance := req.GetInt(paramImportance, h.cfg.Memory.DefaultImportance)
 
 	now := time.Now().Unix()
 	id := newULID()
@@ -132,28 +132,28 @@ func (h *Handlers) StoreMemory(ctx context.Context, req mcp.CallToolRequest) (*m
 	compressor.IncrementTags(ctx, h.rdb, tags)
 
 	result := map[string]any{
-		"id":         id,
-		"type":       memType,
-		"project":    project,
-		"created_at": now,
+		paramID:        id,
+		paramType:      memType,
+		paramProject:   project,
+		paramCreatedAt: now,
 	}
 	return jsonResult(result)
 }
 
 // Recall handles the recall tool.
 func (h *Handlers) Recall(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-	query, err := req.RequireString("query")
+	query, err := req.RequireString(paramQuery)
 	if err != nil {
 		return mcp.NewToolResultError("query is required"), nil
 	}
-	if err := validateLength("query", query, maxQueryLen); err != nil {
+	if err := validateLength(paramQuery, query, maxQueryLen); err != nil {
 		return mcp.NewToolResultError(err.Error()), nil
 	}
 
-	project := req.GetString("project", "")
-	memType := req.GetString("type", "")
-	limit := req.GetInt("limit", 10)
-	searchMode := req.GetString("search_mode", string(memory.Hybrid))
+	project := req.GetString(paramProject, "")
+	memType := req.GetString(paramType, "")
+	limit := req.GetInt(paramLimit, 10)
+	searchMode := req.GetString(paramSearchMode, string(memory.Hybrid))
 
 	// Server-side clamping: never trust schema-level validation alone
 	if limit < minLimit {
@@ -200,14 +200,14 @@ func (h *Handlers) Recall(ctx context.Context, req mcp.CallToolRequest) (*mcp.Ca
 	items := make([]map[string]any, 0, len(results))
 	for _, r := range results {
 		items = append(items, map[string]any{
-			"id":         r.Memory.ID,
-			"content":    r.Memory.Content,
-			"type":       string(r.Memory.Type),
-			"project":    r.Memory.Project,
-			"tags":       r.Memory.Tags,
-			"importance": r.Memory.Importance,
-			"score":      r.Score,
-			"created_at": r.Memory.CreatedAt,
+			paramID:         r.Memory.ID,
+			paramContent:    r.Memory.Content,
+			paramType:       string(r.Memory.Type),
+			paramProject:    r.Memory.Project,
+			paramTags:       r.Memory.Tags,
+			paramImportance: r.Memory.Importance,
+			paramScore:      r.Score,
+			paramCreatedAt:  r.Memory.CreatedAt,
 		})
 	}
 
@@ -216,9 +216,9 @@ func (h *Handlers) Recall(ctx context.Context, req mcp.CallToolRequest) (*mcp.Ca
 
 // Forget handles the forget tool.
 func (h *Handlers) Forget(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-	id := req.GetString("id", "")
-	project := req.GetString("project", "")
-	olderThan := req.GetString("older_than", "")
+	id := req.GetString(paramID, "")
+	project := req.GetString(paramProject, "")
+	olderThan := req.GetString(paramOlderThan, "")
 
 	if project != "" {
 		if err := memory.ValidateTagValue(project); err != nil {
@@ -263,7 +263,7 @@ func (h *Handlers) Forget(ctx context.Context, req mcp.CallToolRequest) (*mcp.Ca
 
 // StartSession handles the start_session tool.
 func (h *Handlers) StartSession(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-	project, err := req.RequireString("project")
+	project, err := req.RequireString(paramProject)
 	if err != nil {
 		return mcp.NewToolResultError("project is required"), nil
 	}
@@ -332,16 +332,16 @@ func (h *Handlers) StartSession(ctx context.Context, req mcp.CallToolRequest) (*
 	keyMemories := make([]map[string]any, 0, len(topMemories))
 	for _, m := range topMemories {
 		keyMemories = append(keyMemories, map[string]any{
-			"id":         m.ID,
-			"content":    m.Content,
-			"type":       string(m.Type),
-			"importance": m.Importance,
-			"tags":       m.Tags,
+			paramID:         m.ID,
+			paramContent:    m.Content,
+			paramType:       string(m.Type),
+			paramImportance: m.Importance,
+			paramTags:       m.Tags,
 		})
 	}
 
 	result := map[string]any{
-		"session_id":       sessionID,
+		paramSessionID:    sessionID,
 		"previous_summary": previousSummary,
 		"key_memories":     keyMemories,
 	}
@@ -366,8 +366,8 @@ func (h *Handlers) EndSession(ctx context.Context, req mcp.CallToolRequest) (*mc
 		return mcp.NewToolResultError("no active session to end"), nil
 	}
 
-	summary := req.GetString("summary", "")
-	observations := req.GetString("observations", "")
+	summary := req.GetString(paramSummary, "")
+	observations := req.GetString(paramObservations, "")
 	now := time.Now().Unix()
 
 	memoriesCreated := 0
@@ -411,6 +411,43 @@ func (h *Handlers) EndSession(ctx context.Context, req mcp.CallToolRequest) (*mc
 	return jsonResult(result)
 }
 
+// RenameProject handles the rename_project tool.
+func (h *Handlers) RenameProject(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	oldName, err := req.RequireString(paramOldName)
+	if err != nil {
+		return mcp.NewToolResultError("old_name is required"), nil
+	}
+	newName, err := req.RequireString(paramNewName)
+	if err != nil {
+		return mcp.NewToolResultError("new_name is required"), nil
+	}
+
+	if err := validateLength(paramOldName, oldName, maxProjectLen); err != nil {
+		return mcp.NewToolResultError(err.Error()), nil
+	}
+	if err := validateLength(paramNewName, newName, maxProjectLen); err != nil {
+		return mcp.NewToolResultError(err.Error()), nil
+	}
+	if err := memory.ValidateTagValue(newName); err != nil {
+		return mcp.NewToolResultError(err.Error()), nil
+	}
+	if oldName == newName {
+		return mcp.NewToolResultError("old_name and new_name must be different"), nil
+	}
+
+	memories, sessions, err := h.store.RenameProject(ctx, oldName, newName)
+	if err != nil {
+		return nil, fmt.Errorf("rename project: %w", err)
+	}
+
+	return jsonResult(map[string]any{
+		"old_name":         oldName,
+		"new_name":         newName,
+		"memories_updated": memories,
+		"sessions_updated": sessions,
+	})
+}
+
 // ListProjects handles the list_projects tool.
 // Uses a single FT.AGGREGATE to fetch all project counts instead of N+1 FT.SEARCH calls.
 func (h *Handlers) ListProjects(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
@@ -429,8 +466,8 @@ func (h *Handlers) ListProjects(ctx context.Context, req mcp.CallToolRequest) (*
 	items := make([]map[string]any, 0, len(projects))
 	for _, p := range projects {
 		items = append(items, map[string]any{
-			"project":      p,
-			"memory_count": counts[p],
+			paramProject:      p,
+			paramMemoryCount:  counts[p],
 		})
 	}
 
@@ -439,7 +476,7 @@ func (h *Handlers) ListProjects(ctx context.Context, req mcp.CallToolRequest) (*
 
 // MemoryStats handles the memory_stats tool.
 func (h *Handlers) MemoryStats(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-	project := req.GetString("project", "")
+	project := req.GetString(paramProject, "")
 	if project != "" {
 		if err := memory.ValidateTagValue(project); err != nil {
 			return mcp.NewToolResultError(err.Error()), nil
@@ -456,7 +493,7 @@ func (h *Handlers) MemoryStats(ctx context.Context, req mcp.CallToolRequest) (*m
 
 // UpdateMemory handles the update_memory tool.
 func (h *Handlers) UpdateMemory(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-	id, err := req.RequireString("id")
+	id, err := req.RequireString(paramID)
 	if err != nil {
 		return mcp.NewToolResultError("id is required"), nil
 	}
@@ -469,30 +506,30 @@ func (h *Handlers) UpdateMemory(ctx context.Context, req mcp.CallToolRequest) (*
 	fields := make(map[string]any)
 	updatedFields := []string{}
 
-	if content := req.GetString("content", ""); content != "" {
+	if content := req.GetString(paramContent, ""); content != "" {
 		// Apply same length limit as StoreMemory
-		if err := validateLength("content", content, maxContentLen); err != nil {
+		if err := validateLength(paramContent, content, maxContentLen); err != nil {
 			return mcp.NewToolResultError(err.Error()), nil
 		}
-		fields["content"] = content
-		updatedFields = append(updatedFields, "content")
+		fields[paramContent] = content
+		updatedFields = append(updatedFields, paramContent)
 	}
-	if tags := req.GetString("tags", ""); tags != "" {
-		if err := validateLength("tags", tags, maxTagsLen); err != nil {
+	if tags := req.GetString(paramTags, ""); tags != "" {
+		if err := validateLength(paramTags, tags, maxTagsLen); err != nil {
 			return mcp.NewToolResultError(err.Error()), nil
 		}
 		if err := validateTags(tags); err != nil {
 			return mcp.NewToolResultError(err.Error()), nil
 		}
-		fields["tags"] = tags
-		updatedFields = append(updatedFields, "tags")
+		fields[paramTags] = tags
+		updatedFields = append(updatedFields, paramTags)
 	}
-	if importance := req.GetInt("importance", 0); importance > 0 {
+	if importance := req.GetInt(paramImportance, 0); importance > 0 {
 		if importance > 10 {
 			importance = 10
 		}
-		fields["importance"] = importance
-		updatedFields = append(updatedFields, "importance")
+		fields[paramImportance] = importance
+		updatedFields = append(updatedFields, paramImportance)
 	}
 
 	if len(fields) == 0 {
@@ -506,7 +543,7 @@ func (h *Handlers) UpdateMemory(ctx context.Context, req mcp.CallToolRequest) (*
 	}
 
 	result := map[string]any{
-		"id":             id,
+		paramID:          id,
 		"updated_fields": updatedFields,
 	}
 	return jsonResult(result)
@@ -645,12 +682,12 @@ func (h *Handlers) HandleEndSession(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Validate lengths
-	if err := validateLength("observations", body.Observations, maxContentLen); err != nil {
+	if err := validateLength(paramObservations, body.Observations, maxContentLen); err != nil {
 		w.WriteHeader(http.StatusBadRequest)
 		json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
 		return
 	}
-	if err := validateLength("summary", body.Summary, maxContentLen); err != nil {
+	if err := validateLength(paramSummary, body.Summary, maxContentLen); err != nil {
 		w.WriteHeader(http.StatusBadRequest)
 		json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
 		return
@@ -670,8 +707,8 @@ func (h *Handlers) HandleEndSession(w http.ResponseWriter, r *http.Request) {
 	// Build synthetic MCP request with arguments
 	req := mcp.CallToolRequest{}
 	req.Params.Arguments = map[string]any{
-		"observations": body.Observations,
-		"summary":      body.Summary,
+		paramObservations: body.Observations,
+		paramSummary:      body.Summary,
 	}
 
 	result, err := h.EndSession(r.Context(), req)

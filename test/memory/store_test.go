@@ -118,8 +118,8 @@ func TestStore(t *testing.T) {
 		}
 
 		err := store.Update(ctx, "test-update", map[string]any{
-			"content":    "Updated content with new info",
-			"importance": 8,
+			memory.FieldContent:    "Updated content with new info",
+			memory.FieldImportance: 8,
 		})
 		if err != nil {
 			t.Fatalf("Update: %v", err)
@@ -217,11 +217,11 @@ func TestStore(t *testing.T) {
 		if stats.Total < 8 {
 			t.Errorf("Total = %d, want >= 8", stats.Total)
 		}
-		if stats.ByType["fact"] < 4 {
-			t.Errorf("ByType[fact] = %d, want >= 4", stats.ByType["fact"])
+		if stats.ByType[string(memory.Fact)] < 4 {
+			t.Errorf("ByType[fact] = %d, want >= 4", stats.ByType[string(memory.Fact)])
 		}
-		if stats.ByType["concept"] < 3 {
-			t.Errorf("ByType[concept] = %d, want >= 3", stats.ByType["concept"])
+		if stats.ByType[string(memory.Concept)] < 3 {
+			t.Errorf("ByType[concept] = %d, want >= 3", stats.ByType[string(memory.Concept)])
 		}
 		if stats.AvgImportance == 0 {
 			t.Error("AvgImportance should be > 0")
@@ -255,6 +255,93 @@ func TestStore(t *testing.T) {
 	})
 }
 
+// TestRenameProject verifies that all memories, sessions, and project-set entries
+// migrate atomically from the old project name to the new one.
+func TestRenameProject(t *testing.T) {
+	store := newRenameTestStore(t)
+	ctx := context.Background()
+
+	now := time.Now().Unix()
+	mems := []*memory.Memory{
+		{ID: "test-rename-mem-001", Content: "first memory", Type: memory.Fact, Project: renameSrcProject, Tags: "test", Importance: 5, CreatedAt: now, LastAccessed: now},
+		{ID: "test-rename-mem-002", Content: "second memory", Type: memory.Concept, Project: renameSrcProject, Tags: "test", Importance: 7, CreatedAt: now, LastAccessed: now},
+	}
+	for _, m := range mems {
+		if err := store.Save(ctx, m); err != nil {
+			t.Fatalf("Save %s: %v", m.ID, err)
+		}
+	}
+
+	sess := &memory.Session{
+		ID:        "test-rename-sess-001",
+		Project:   renameSrcProject,
+		StartedAt: now,
+		Summary:   "rename test session",
+	}
+	if err := store.SaveSession(ctx, sess); err != nil {
+		t.Fatalf("SaveSession: %v", err)
+	}
+
+	// Allow RediSearch index to catch up
+	time.Sleep(500 * time.Millisecond)
+
+	memCount, sessCount, err := store.RenameProject(ctx, renameSrcProject, renameDstProject)
+	if err != nil {
+		t.Fatalf("RenameProject: %v", err)
+	}
+
+	if memCount != 2 {
+		t.Errorf("memories_updated = %d, want 2", memCount)
+	}
+	if sessCount != 1 {
+		t.Errorf("sessions_updated = %d, want 1", sessCount)
+	}
+
+	// Memories must carry new project name
+	for _, m := range mems {
+		got, err := store.Get(ctx, m.ID)
+		if err != nil {
+			t.Fatalf("Get %s: %v", m.ID, err)
+		}
+		if got.Project != renameDstProject {
+			t.Errorf("memory %s: Project = %q, want %q", m.ID, got.Project, renameDstProject)
+		}
+	}
+
+	// Session must be retrievable under new project
+	last, err := store.GetLastSession(ctx, renameDstProject)
+	if err != nil {
+		t.Fatalf("GetLastSession(dst): %v", err)
+	}
+	if last == nil {
+		t.Fatal("GetLastSession returned nil for dst project")
+	}
+	if last.ID != sess.ID {
+		t.Errorf("last session ID = %q, want %q", last.ID, sess.ID)
+	}
+
+	// Old project must have no sessions
+	old, err := store.GetLastSession(ctx, renameSrcProject)
+	if err != nil {
+		t.Fatalf("GetLastSession(src): %v", err)
+	}
+	if old != nil {
+		t.Errorf("src project still has sessions after rename: %+v", old)
+	}
+
+	// Projects set must reflect the rename
+	projects, err := store.ListProjects(ctx)
+	if err != nil {
+		t.Fatalf("ListProjects: %v", err)
+	}
+	if slices.Contains(projects, renameSrcProject) {
+		t.Errorf("projects set still contains old name %q", renameSrcProject)
+	}
+	if !slices.Contains(projects, renameDstProject) {
+		t.Errorf("projects set missing new name %q", renameDstProject)
+	}
+}
+
 // TestValidateTagValue tests the TAG injection prevention regex. No Redis needed.
 func TestValidateTagValue(t *testing.T) {
 	valid := []string{"redis", "my-tag", "v1.0", "go_lang", "test123"}
@@ -274,7 +361,7 @@ func TestValidateTagValue(t *testing.T) {
 
 // TestValidMemoryType tests type validation. No Redis needed.
 func TestValidMemoryType(t *testing.T) {
-	for _, v := range []string{"fact", "concept", "narrative"} {
+	for _, v := range []string{string(memory.Fact), string(memory.Concept), string(memory.Narrative)} {
 		if !memory.ValidMemoryType(v) {
 			t.Errorf("ValidMemoryType(%q) should be true", v)
 		}
