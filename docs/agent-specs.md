@@ -73,11 +73,11 @@ Always pass `project` to scope results. Use `type` filter when you know what you
 
 Call `forget` to clean up outdated or duplicate memories. At least one parameter is required.
 
-| Parameter    | Description                         | Example            |
-| ------------ | ----------------------------------- | ------------------ |
-| `id`         | Delete a specific memory by ULID    | `"01KMX7M123..."`  |
-| `project`    | Delete all memories in a project    | `"old-project"`    |
-| `older_than` | Delete memories older than duration | `"720h"` (30 days) |
+| Parameter    | Description                         | Example             |
+| ------------ | ----------------------------------- | ------------------- |
+| `id`         | Delete a specific memory by ULID    | `"01KMX7M123..."`   |
+| `project`    | Delete all memories in a project    | `"old-project"`     |
+| `older_than` | Delete memories older than duration | `"30d"` or `"720h"` |
 
 Parameters can be combined: `project` + `older_than` deletes old memories from a specific project.
 
@@ -87,12 +87,12 @@ Note: `start_session` automatically runs maintenance (auto-forget stale low-impo
 
 Call `update_memory` when a stored fact changes or needs correction. You need the memory ID, so `recall` first to find it.
 
-| Parameter    | Required | Description                         |
-| ------------ | -------- | ----------------------------------- |
-| `id`         | yes      | Memory ULID (from `recall` results) |
-| `content`    | no       | New content text                    |
-| `importance` | no       | New importance (1-10)               |
-| `tags`       | no       | New comma-separated tags            |
+| Parameter    | Required | Description                                         |
+| ------------ | -------- | --------------------------------------------------- |
+| `id`         | yes      | Memory ULID (from `recall` results)                 |
+| `content`    | no       | New content text (triggers embedding recalculation) |
+| `importance` | no       | New importance (1-10)                               |
+| `tags`       | no       | New comma-separated tags                            |
 
 ### When to end sessions
 
@@ -123,10 +123,20 @@ end_session(observations: "Renamed Makefile targets mcp-register -> mcp,
 
 ### Utility tools
 
-| Tool            | When to use                                                                                   |
-| --------------- | --------------------------------------------------------------------------------------------- |
-| `list_projects` | Discover which projects have stored memories                                                  |
-| `memory_stats`  | Check memory health: total count, type distribution, avg importance. Pass `project` to scope. |
+| Tool             | When to use                                                                                   |
+| ---------------- | --------------------------------------------------------------------------------------------- |
+| `list_projects`  | Discover which projects have stored memories                                                  |
+| `memory_stats`   | Check memory health: total count, type distribution, avg importance. Pass `project` to scope. |
+| `rename_project` | Rename a project, migrating all memories and sessions to the new name.                        |
+
+#### `rename_project` parameters
+
+| Parameter  | Required | Description          |
+| ---------- | -------- | -------------------- |
+| `old_name` | yes      | Current project name |
+| `new_name` | yes      | New project name     |
+
+Returns `memories_updated` and `sessions_updated` counts.
 
 ### Continuous usage pattern
 

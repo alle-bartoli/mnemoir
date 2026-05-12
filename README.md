@@ -12,7 +12,7 @@ Fully offline-capable, no API keys required.
 - **Typed memories**: `fact`, `concept`, `narrative` with automatic classification
 - **Session management**: start/end sessions with automatic summarization
 - **Multi-project**: scoped memories per project
-- **8 MCP tools**: `store_memory`, `recall`, `forget`, `update_memory`, `start_session`, `end_session`, `list_projects`, `memory_stats`
+- **9 MCP tools**: `store_memory`, `recall`, `forget`, `update_memory`, `start_session`, `end_session`, `list_projects`, `memory_stats`, `rename_project`
 
 ## Prerequisites
 

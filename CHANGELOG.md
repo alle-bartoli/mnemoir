@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased] - 2026-05-12 (Alessandro Bartoli)
 
+### Docs
+
+- **`README.md`**: updated tool count from 8 to 9, added `rename_project` to
+  the features list
+- **`docs/agent-specs.md`**: added `rename_project` to utility tools table with
+  parameter reference (`old_name`, `new_name`) and return values; fixed
+  `older_than` example to show both `"30d"` and `"720h"` formats; noted that
+  `content` update triggers embedding recalculation
+
 ## Safely db backup/restore feature
 
 ### Fixed
