@@ -9,6 +9,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Safely db backup/restore feature
 
+### Fixed
+
+- **`scripts/backup-native.sh` `redis-cli` not found**: script failed when Redis
+  runs in Docker and `redis-cli` is not installed locally
+  - Added `redis_cli()` wrapper: uses local `redis-cli` if available, falls back
+    to `docker exec $REDIS_CONTAINER redis-cli`
+  - Container name defaults to `mnemoir-redis-1`, overridable via
+    `MNEMOIR_REDIS_CONTAINER` env var
+- **`scripts/backup-native.sh` missing parent directory**: `cp` failed when
+  output parent did not exist; added `mkdir -p "$(dirname "$OUTPUT")"` before copy
+- **`make backup` / `make backup-json` default `OUTPUT` not applied**: shell
+  syntax `${VAR:-default}` in a Makefile recipe is expanded by Make as a variable
+  named `VAR:-default`, silently dropping the fallback and passing an empty
+  argument to the script; replaced with `$(or $(OUTPUT),<default>)`
+
+### Changed
+
+- **`make backup` default output**: no longer requires `OUTPUT=`; defaults to
+  `~/.mnemoir/backups/YYYYMMDD` when omitted
+- **`make backup-json` default output**: no longer requires `OUTPUT=`; defaults
+  to `~/.mnemoir/backups/YYYYMMDD.json` when omitted
+- **README backup examples**: updated to show `make backup` / `make backup-json`
+  without arguments, using the new defaults
+
 ### Added
 
 - **`backup` / `restore` CLI subcommands**: full Redis snapshot to portable JSON

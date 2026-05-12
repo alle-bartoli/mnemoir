@@ -133,10 +133,14 @@ Captures the full Redis dataset (RDB + AOF) with a single atomic BGSAVE. Redis k
 
 ```bash
 # Backup — triggers BGSAVE, waits for completion, copies data/
-make backup OUTPUT=~/mnemoir-backups/$(date +%Y%m%d)
+# Default output: ~/.mnemoir/backups/YYYYMMDD
+make backup
+
+# Override output location
+make backup OUTPUT=~/my-backups/$(date +%Y%m%d)
 
 # Restore — stops Redis, replaces data/, restarts Redis
-make restore INPUT=~/mnemoir-backups/20260512
+make restore INPUT=~/.mnemoir/backups/20260512
 ```
 
 **When to use**: daily snapshots, disaster recovery, same-machine restores.
@@ -151,13 +155,17 @@ Exports all memories, sessions, projects, and tag frequencies to a portable JSON
 
 ```bash
 # Backup — writes indented JSON
-make backup-json OUTPUT=~/mnemoir-backups/snapshot.json
+# Default output: ~/.mnemoir/backups/YYYYMMDD.json
+make backup-json
+
+# Override output location
+make backup-json OUTPUT=~/my-backups/snapshot.json
 
 # Restore (additive — merges with existing data)
-make restore-json INPUT=~/mnemoir-backups/snapshot.json
+make restore-json INPUT=~/.mnemoir/backups/20260512.json
 
 # Restore (clean — wipes DB first, then restores)
-bin/mnemoir restore --flush --input ~/mnemoir-backups/snapshot.json \
+bin/mnemoir restore --flush --input ~/.mnemoir/backups/20260512.json \
   --config ~/.mnemoir/config.toml
 ```
 
@@ -193,9 +201,9 @@ make mcp            # Register MCP (project-local)
 make mcp-global     # Register MCP (all projects)
 make hook           # Install SessionEnd hook
 make specs          # Install agent specs into ~/.claude/memory/
-make backup         # Hot backup Redis data dir via BGSAVE (OUTPUT=path/to/dir)
+make backup         # Hot backup Redis data dir via BGSAVE (default: ~/.mnemoir/backups/YYYYMMDD)
 make restore        # Cold restore Redis data dir (INPUT=path/to/dir)
-make backup-json    # Dump memories to JSON (OUTPUT=path/to/file.json)
+make backup-json    # Dump memories to JSON (default: ~/.mnemoir/backups/YYYYMMDD.json)
 make restore-json   # Restore memories from JSON (INPUT=path/to/file.json)
 make clean          # Remove build artifacts
 make clean-data     # Stop Redis + wipe data/
