@@ -7,7 +7,79 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased] - 2026-05-12 (Alessandro Bartoli)
 
+## Safely db backup/restore feature
+
+### Fixed
+
+- **`scripts/backup-native.sh` `redis-cli` not found**: script failed when Redis
+  runs in Docker and `redis-cli` is not installed locally
+  - Added `redis_cli()` wrapper: uses local `redis-cli` if available, falls back
+    to `docker exec $REDIS_CONTAINER redis-cli`
+  - Container name defaults to `mnemoir-redis-1`, overridable via
+    `MNEMOIR_REDIS_CONTAINER` env var
+- **`scripts/backup-native.sh` missing parent directory**: `cp` failed when
+  output parent did not exist; added `mkdir -p "$(dirname "$OUTPUT")"` before copy
+- **`make backup` / `make backup-json` default `OUTPUT` not applied**: shell
+  syntax `${VAR:-default}` in a Makefile recipe is expanded by Make as a variable
+  named `VAR:-default`, silently dropping the fallback and passing an empty
+  argument to the script; replaced with `$(or $(OUTPUT),<default>)`
+
+### Changed
+
+- **`make backup` default output**: no longer requires `OUTPUT=`; defaults to
+  `~/.mnemoir/backups/YYYYMMDD` when omitted
+- **`make backup-json` default output**: no longer requires `OUTPUT=`; defaults
+  to `~/.mnemoir/backups/YYYYMMDD.json` when omitted
+- **README backup examples**: updated to show `make backup` / `make backup-json`
+  without arguments, using the new defaults
+
 ### Added
+
+- **`backup` / `restore` CLI subcommands**: full Redis snapshot to portable JSON
+  - `mnemoir backup [--output file]` dumps all memories, sessions, projects,
+    `project_sessions:*` sorted sets, and `tags:frequency` to JSON (stdout or file)
+  - `mnemoir restore [--input file]` loads snapshot back into Redis, additively
+    overwriting on key conflicts; calls `EnsureIndex` after restore
+  - Embeddings stored as base64 of raw `float32` little-endian bytes (no re-embed needed)
+  - New package `internal/backup/backup.go` with `Dump` and `Restore` functions
+  - New `cmd/mnemoir/backup_cmd.go` with `runBackup` / `runRestore` and shared
+    `mustConnectRedis` helper
+  - `main.go` dispatches `os.Args[1]` == `"backup"` / `"restore"` before server startup
+  - `Makefile` targets: `make backup-json OUTPUT=path/to/file.json` and
+    `make restore-json INPUT=path/to/file.json`
+  - `SnapshotHeader` type for peeking version and `embedding_dim` without full decode
+  - `EmbeddingDim` field in `Snapshot`: captured from live index at dump time via
+    `redis.GetIndexDimension`; validated against current index before any write at restore
+    time, failing fast with a clear mismatch error
+  - `RestoreResult.IndexingComplete`: true when RediSearch finishes background
+    indexing within the 2-minute timeout
+  - `waitForReindex` in `restore.go`: 300ms initial sleep (gives RediSearch time to
+    detect new hashes via keyspace notifications) then polls `FT.INFO indexing==0`
+    every 500ms up to 2 minutes
+  - `redis.GetIndexDimension(*goredis.Client)`: raw-client variant of
+    `CheckIndexDimension` for callers without a `*Client` wrapper (e.g. `dbops`)
+  - `redis.IsIndexingComplete(*goredis.Client)`: reads `indexing` field from
+    `FT.INFO`; returns true if field absent (old Redis versions)
+  - `redis.extractIntField`: walks RESP2 `[]any` and RESP3 `map[any]any` responses
+    looking for a named integer field
+  - `--flush` flag on `mnemoir restore`: `FLUSHDB` then `EnsureIndex` with snapshot
+    dimension before restoring; prints explicit warning before destructive operation
+  - Atomicity warning printed to stderr on `mnemoir backup` (JSON path is not atomic;
+    recommends `make backup` for consistent snapshots)
+  - `runRestore` now reads input to a buffer first, peeks `SnapshotHeader` for
+    `embedding_dim`, calls `EnsureIndex` with the snapshot dimension (not config
+    dimension), then passes the buffer to `Restore`
+- **Native Redis backup/restore scripts** (trivial hot/cold path via RDB+AOF)
+  - `scripts/backup-native.sh <output-dir>`: triggers `BGSAVE`, polls `LASTSAVE`
+    until complete, then copies the full `data/` directory (RDB + AOF captured)
+  - `scripts/restore-native.sh <backup-dir>`: stops Redis via Docker Compose,
+    replaces `data/`, restarts; cold path required because AOF takes precedence
+    over RDB on startup
+  - `Makefile` targets: `make backup OUTPUT=dir` and `make restore INPUT=dir`
+
+## rename_project tool feature
+
+### Added (continued)
 
 - **`rename_project` MCP tool**: migrates all memories, sessions, and project-set
   entries from an old project name to a new one

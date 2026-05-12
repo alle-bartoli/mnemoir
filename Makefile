@@ -12,6 +12,10 @@
 	mcp-global \
 	hook \
 	specs \
+	backup \
+	restore \
+	backup-json \
+	restore-json \
 	clean \
 	clean-data
 
@@ -39,6 +43,10 @@ help:
 	@echo "  make mcp-global    - Register MCP server globally (all projects)"
 	@echo "  make hook          - Install Claude Code SessionEnd hook"
 	@echo "  make specs         - Install agent specs into ~/.claude/memory/"
+	@echo "  make backup        - Hot backup Redis data dir via BGSAVE (OUTPUT=path/to/dir, default: ~/.mnemoir/backups/YYYYMMDD)"
+	@echo "  make restore       - Cold restore Redis data dir (INPUT=path/to/dir)"
+	@echo "  make backup-json   - Dump all memories to JSON (OUTPUT=path/to/file.json, default: ~/.mnemoir/backups/YYYYMMDD.json)"
+	@echo "  make restore-json  - Restore memories from JSON (INPUT=path/to/file.json)"
 	@echo "  make clean         - Remove build artifacts"
 	@echo "  make clean-data    - Stop Redis and wipe all stored memories (data/)"
 
@@ -119,6 +127,26 @@ mcp-global: build
 		exit 1; \
 	fi
 	claude mcp add $(BINARY) -s user -t stdio -e MNEMOIR_REDIS_PASSWORD="$$MNEMOIR_REDIS_PASSWORD" -- $(CURDIR)/$(BIN_DIR)/$(BINARY) --config $(CONFIG_DIR)/config.toml
+
+backup:
+	@$(CURDIR)/scripts/backup-native.sh "$(or $(OUTPUT),$(CONFIG_DIR)/backups/$(shell date +%Y%m%d))"
+
+restore:
+	@if [ -z "$(INPUT)" ]; then \
+		echo "Usage: make restore INPUT=path/to/backup-dir"; \
+		exit 1; \
+	fi
+	@$(CURDIR)/scripts/restore-native.sh $(INPUT)
+
+backup-json: build
+	$(BIN_DIR)/$(BINARY) backup --config $(CONFIG_DIR)/config.toml --output "$(or $(OUTPUT),$(CONFIG_DIR)/backups/$(shell date +%Y%m%d).json)"
+
+restore-json: build
+	@if [ -z "$(INPUT)" ]; then \
+		echo "Usage: make restore-json INPUT=path/to/backup.json"; \
+		exit 1; \
+	fi
+	$(BIN_DIR)/$(BINARY) restore --config $(CONFIG_DIR)/config.toml --input $(INPUT)
 
 clean:
 	rm -rf $(BIN_DIR)

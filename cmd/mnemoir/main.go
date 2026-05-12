@@ -24,6 +24,17 @@ import (
 var version = "0.0.0"
 
 func main() {
+	if len(os.Args) > 1 {
+		switch os.Args[1] {
+		case "backup":
+			runBackup(os.Args[2:])
+			return
+		case "restore":
+			runRestore(os.Args[2:])
+			return
+		}
+	}
+
 	configPath := flag.String("config", config.DefaultConfigPath(), "Path to config file")
 	showVersion := flag.Bool("version", false, "Print version and exit")
 	flag.Parse()
