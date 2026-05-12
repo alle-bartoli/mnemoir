@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+
+	goredis "github.com/redis/go-redis/v9"
 )
 
 const IndexName = "idx:memories"
@@ -70,6 +72,30 @@ func CheckIndexDimension(ctx context.Context, c *Client) (int, error) {
 	return parseDimensionFromInfo(res)
 }
 
+// @dev GetIndexDimension is a raw-client variant of CheckIndexDimension for callers
+// that hold a *goredis.Client directly (e.g. dbops) without a full *Client wrapper.
+// Returns 0, err if the index does not exist.
+func GetIndexDimension(ctx context.Context, rdb *goredis.Client) (int, error) {
+	res, err := rdb.Do(ctx, "FT.INFO", IndexName).Result()
+	if err != nil {
+		return 0, fmt.Errorf("FT.INFO: %w", err)
+	}
+	return parseDimensionFromInfo(res)
+}
+
+// @dev IsIndexingComplete reports whether RediSearch has finished background indexing.
+// Reads the `indexing` field from FT.INFO: 1 = in progress, 0 = done.
+// Returns true if the field is absent (old Redis versions that don't report it).
+func IsIndexingComplete(ctx context.Context, rdb *goredis.Client) (bool, error) {
+	res, err := rdb.Do(ctx, "FT.INFO", IndexName).Result()
+	if err != nil {
+		return false, fmt.Errorf("FT.INFO: %w", err)
+	}
+	indexing := extractIntField(res, "indexing")
+	return indexing == 0, nil
+}
+
+
 // parseDimensionFromInfo extracts DIM from FT.INFO result by walking the typed structure.
 func parseDimensionFromInfo(info any) (int, error) {
 	return parseDimensionNested(info)
@@ -110,6 +136,28 @@ func parseDimensionNested(v any) (int, error) {
 		}
 	}
 	return 0, fmt.Errorf("DIM not found in index info")
+}
+
+// @dev extractIntField walks an FT.INFO response (RESP2 []any or RESP3 map[any]any)
+// looking for a top-level key and returns its integer value. Returns 0 if not found.
+func extractIntField(info any, field string) int {
+	switch v := info.(type) {
+	case map[any]any:
+		for k, val := range v {
+			if str, ok := k.(string); ok && strings.EqualFold(str, field) {
+				n, _ := toInt(val)
+				return n
+			}
+		}
+	case []any:
+		for i := 0; i < len(v)-1; i++ {
+			if str, ok := v[i].(string); ok && strings.EqualFold(str, field) {
+				n, _ := toInt(v[i+1])
+				return n
+			}
+		}
+	}
+	return 0
 }
 
 func toInt(v any) (int, error) {

@@ -123,6 +123,62 @@ Maintenance runs periodically (default: once per hour per project).
 Memories with `effective_importance <= 2.0` AND not accessed in 90+ days are automatically deleted.
 Both thresholds are configurable via `maintenance.forget_threshold` and `maintenance.forget_inactive_days`.
 
+## Backup & Restore
+
+Two complementary strategies are available. Use **native** for routine backups and disaster recovery; use **JSON** for portability, cross-host migrations, or human-readable snapshots.
+
+### Native backup (recommended)
+
+Captures the full Redis dataset (RDB + AOF) with a single atomic BGSAVE. Redis keeps running throughout.
+
+```bash
+# Backup — triggers BGSAVE, waits for completion, copies data/
+make backup OUTPUT=~/mnemoir-backups/$(date +%Y%m%d)
+
+# Restore — stops Redis, replaces data/, restarts Redis
+make restore INPUT=~/mnemoir-backups/20260512
+```
+
+**When to use**: daily snapshots, disaster recovery, same-machine restores.
+
+**Guarantees**: atomic snapshot (BGSAVE point-in-time), exact Redis state preserved including AOF, no data loss.
+
+**Restore caveats**: Redis must be managed by the local Docker Compose. The `restore` target stops and restarts the container.
+
+### JSON backup
+
+Exports all memories, sessions, projects, and tag frequencies to a portable JSON file. Embedding vectors are stored as base64 of the raw `float32` bytes, so no re-embedding is needed at restore time.
+
+```bash
+# Backup — writes indented JSON
+make backup-json OUTPUT=~/mnemoir-backups/snapshot.json
+
+# Restore (additive — merges with existing data)
+make restore-json INPUT=~/mnemoir-backups/snapshot.json
+
+# Restore (clean — wipes DB first, then restores)
+bin/mnemoir restore --flush --input ~/mnemoir-backups/snapshot.json \
+  --config ~/.mnemoir/config.toml
+```
+
+**When to use**: cross-host migrations, human-readable snapshots, selective restores, environments where the Docker volume is not accessible.
+
+**Guarantees**: embedding vectors are bit-exact (no re-inference). Restore validates the embedding dimension against the live RediSearch index before writing any data — a dimension mismatch returns a clear error with no partial writes. After restore, the command blocks until RediSearch finishes re-indexing (up to 2 minutes) and prints a warning if the timeout is reached.
+
+**Restore caveats**: JSON backup is **not atomic** — concurrent writes during `backup-json` may produce an inconsistent snapshot. Stop the MCP server or use `make backup` if consistency is required. Without `--flush`, restore is additive (existing keys are overwritten on conflict but unrelated keys are left intact).
+
+### Choosing between the two
+
+|                             | Native (`make backup`) | JSON (`make backup-json`) |
+| --------------------------- | ---------------------- | ------------------------- |
+| Atomic snapshot             | Yes (BGSAVE)           | No                        |
+| Redis must be local Docker  | Yes                    | No                        |
+| Human-readable              | No                     | Yes                       |
+| Cross-host migrate          | No                     | Yes                       |
+| Embedding re-inference      | Not needed             | Not needed                |
+| Selective restore           | No                     | Possible (edit JSON)      |
+| Restore requires Redis stop | Yes                    | No                        |
+
 ## Development
 
 ```bash
@@ -137,6 +193,10 @@ make mcp            # Register MCP (project-local)
 make mcp-global     # Register MCP (all projects)
 make hook           # Install SessionEnd hook
 make specs          # Install agent specs into ~/.claude/memory/
+make backup         # Hot backup Redis data dir via BGSAVE (OUTPUT=path/to/dir)
+make restore        # Cold restore Redis data dir (INPUT=path/to/dir)
+make backup-json    # Dump memories to JSON (OUTPUT=path/to/file.json)
+make restore-json   # Restore memories from JSON (INPUT=path/to/file.json)
 make clean          # Remove build artifacts
 make clean-data     # Stop Redis + wipe data/
 make install        # Install to $GOPATH/bin
@@ -151,8 +211,9 @@ See [docs/agent-specs.md](docs/agent-specs.md) for the ready-to-copy prompt bloc
 
 ## TODO
 
+- [x] Project rename
 - [ ] Cross-project recall
-- [ ] Memory export/import (JSON backup/restore)
+- [x] Memory export/import (JSON backup/restore + native BGSAVE)
 
 ## License
 
