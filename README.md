@@ -16,67 +16,125 @@ Fully offline-capable, no API keys required.
 
 ## Prerequisites
 
-- Go 1.25+
-- Docker and Docker Compose
-- `jq` (for hook installation)
-
-> **Note**: tested only on macOS Tahoe 26.4 / Apple M1 Pro (arm64). Linux and other architectures may work but are untested.
-
-## Quick Start
+Install these before cloning:
 
 ```bash
-# Set Redis password
-export MNEMOIR_REDIS_PASSWORD="your-secret"
+# macOS (Homebrew)
+brew install go docker docker-compose jq
 
-# claude: full install (docker + build + config + MCP + hook + agent specs)
+# Start Docker Desktop (required for Redis)
+open -a Docker
+```
+
+Go 1.25+, Docker with Compose v2, and `jq` are required. Tested on macOS Tahoe 26.4 / Apple M1 Pro (arm64); Linux and other architectures may work but are untested.
+
+## Installation
+
+### 1. Clone and configure
+
+```bash
+git clone https://github.com/alle-bartoli/mnemoir.git
+cd mnemoir
+
+# Create .env to persist your Redis password across sessions
+echo 'MNEMOIR_REDIS_PASSWORD=your-secret' > .env
+```
+
+Replace `your-secret` with any strong password. The `.env` file is gitignored.
+
+### 2. Install the binary
+
+```bash
+make install
+```
+
+This builds the binary and installs it to `$(go env GOPATH)/bin/mnemoir`. Verify:
+
+```bash
+which mnemoir   # should print e.g. /Users/you/go/bin/mnemoir
+```
+
+### 3. Run setup for your AI client
+
+**claude (CLI):**
+
+```bash
 make setup
+```
 
-# OpenAI Codex CLI: full install
+Starts Redis, copies config to `~/.mnemoir/config.toml`, registers the MCP server with claude globally, installs the `SessionEnd` hook, and installs agent specs.
+
+**OpenAI Codex CLI:**
+
+```bash
 make setup-codex
 ```
 
-### claude
+Same steps, targeting `~/.codex/config.toml` and `~/.codex/AGENTS.md`.
 
-`make setup` starts Redis, builds the binary, copies config to `~/.mnemoir/config.toml`, registers the MCP server globally with claude, installs the `SessionEnd` hook into `~/.claude/settings.json`, and installs agent specs to `~/.claude/memory/reference_mnemoir.md` with a minimal pointer in `~/.claude/CLAUDE.md`.
+### 4. Claude Desktop (optional)
 
-**Note**: `make setup` registers mnemoir for the CLI only. The Desktop app reads its own config file. Add mnemoir to `~/Library/Application Support/Claude/claude_desktop_config.json` (macOS) or `%APPDATA%\Claude\claude_desktop_config.json` (Windows):
+`make setup` registers mnemoir for the claude CLI only. To use it in Claude Desktop, add it manually to the config file:
+
+- macOS: `~/Library/Application Support/Claude/claude_desktop_config.json`
+- Windows: `%APPDATA%\Claude\claude_desktop_config.json`
 
 ```json
 {
   "mcpServers": {
     "mnemoir": {
-      "command": "/path/to/bin/mnemoir",
-      "args": ["--config", "~/.mnemoir/config.toml"],
+      "command": "/Users/you/go/bin/mnemoir",
+      "args": ["--config", "/Users/you/.mnemoir/config.toml"],
       "env": { "MNEMOIR_REDIS_PASSWORD": "your-secret" }
     }
   }
 }
 ```
 
-### OpenAI Codex CLI
-
-`make setup-codex` runs the same initial steps then:
-
-- Registers the MCP server via `codex mcp add` (writes to `~/.codex/config.toml`)
-- Installs a `Stop` hook (fires at the end of each turn) to close mnemoir sessions
-- Installs agent specs to `~/.codex/memory/reference_mnemoir.md` with a minimal pointer in `~/.codex/AGENTS.md`
-
-**Note**: Codex CLI uses `Stop` (per-turn) rather than a true session-end event. The hook is a no-op when no mnemoir session is active (returns 404, hook exits 0).
+Use absolute paths (no `~`). Replace `/Users/you` with your actual home directory (`echo $HOME`).
+Restart Claude Desktop after saving.
 
 ### Other MCP Clients
 
-For clients other than claude and Codex CLI, add the server block to your MCP config file manually.
-
+Add the same `mcpServers` block above to your client's config file.
 Works with: Cursor, Windsurf, Continue.dev, Cline, Zed.
 
-Optional API keys (not needed with default `local` providers):
+### Optional API keys
+
+Only needed if switching from the default `local` providers:
 
 ```bash
-export ANTHROPIC_API_KEY="sk-ant-..."     # Only for Claude compressor
-export OPENAI_API_KEY="sk-..."            # Only for OpenAI embeddings
+export ANTHROPIC_API_KEY="sk-ant-..."  # for Claude compressor
+export OPENAI_API_KEY="sk-..."         # for OpenAI embeddings
 ```
 
-Replace `/path/to/bin/mnemoir` with the actual binary path (`which mnemoir` after `make install`, or `$(pwd)/bin/mnemoir` for local builds).
+## Troubleshooting
+
+**macOS: "Failed to spawn process: Permission denied" in Claude Desktop**
+
+macOS may quarantine the binary after download or build. Remove the quarantine flag:
+
+```bash
+xattr -dr com.apple.quarantine "$(go env GOPATH)/bin/mnemoir"
+```
+
+If that does not help, sign the binary ad-hoc:
+
+```bash
+codesign --force --deep --sign - "$(go env GOPATH)/bin/mnemoir"
+```
+
+Restart Claude Desktop after either fix.
+
+**Binary not found after `make install`**
+
+`$(go env GOPATH)/bin` must be on your `PATH`. Add to `~/.zshrc` or `~/.bashrc`:
+
+```bash
+export PATH="$PATH:$(go env GOPATH)/bin"
+```
+
+Then reload: `source ~/.zshrc`
 
 ## Configuration
 
