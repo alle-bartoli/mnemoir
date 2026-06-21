@@ -5,6 +5,30 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased] - 2026-06-21 (Alessandro Bartoli)
+
+### Added
+
+- **OpenAI Codex CLI auto-install**: `make setup-codex` covers the full Codex
+  client setup in one command (Docker, build, config, MCP, hook, specs)
+   - `make mcp-codex`: registers mnemoir via `codex mcp add`, writing the server
+     entry to `~/.codex/config.toml`
+   - `make hook-codex`: appends a `[[hooks.Stop]]` block to `~/.codex/config.toml`
+     so mnemoir sessions close at the end of each Codex turn; the hook is a no-op
+     when no session is active
+   - `make specs-codex`: writes agent specs to `~/.codex/memory/reference_mnemoir.md`
+     and a lifecycle pointer to `~/.codex/AGENTS.md`
+   - Corresponding `uninstall-*-codex.sh` scripts; `make uninstall` removes
+     Codex CLI artifacts alongside claude artifacts
+
+### Changed
+
+- **Client label in help and docs**: "Claude Code" renamed to "claude" in
+  `make help` output, README, and `docs/agent-specs.md`
+- **Hook fallback note in agent specs**: updated to mention both the `SessionEnd`
+  hook (claude) and the `Stop` hook (Codex CLI) as safety nets for ungraceful
+  session termination
+
 ## [Unreleased] - 2026-05-12 (Alessandro Bartoli)
 
 ### Docs

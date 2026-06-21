@@ -1,6 +1,6 @@
 # Mnemoir
 
-MCP server that gives AI coding agents long-term memory.
+MCP server that gives AI coding agents long-term memory.  
 Runs as a child process via stdio transport, backed by Redis Stack.
 Fully offline-capable, no API keys required.
 
@@ -28,13 +28,18 @@ Fully offline-capable, no API keys required.
 # Set Redis password
 export MNEMOIR_REDIS_PASSWORD="your-secret"
 
-# Full install: docker + build + config + MCP + hook + agent specs
+# claude: full install (docker + build + config + MCP + hook + agent specs)
 make setup
+
+# OpenAI Codex CLI: full install
+make setup-codex
 ```
 
-This starts Redis, builds the binary, copies config to `~/.mnemoir/config.toml`, registers the MCP server globally with Claude Code, installs the `SessionEnd` hook into `~/.claude/settings.json`, and installs agent specs to `~/.claude/memory/reference_mnemoir.md` with a minimal pointer in `~/.claude/CLAUDE.md`.
+### claude
 
-**Note**:`make setup` registers mnemoir for the CLI only. The Desktop app reads its own config file. Add mnemoir to `~/Library/Application Support/Claude/claude_desktop_config.json` (macOS) or `%APPDATA%\Claude\claude_desktop_config.json` (Windows):
+`make setup` starts Redis, builds the binary, copies config to `~/.mnemoir/config.toml`, registers the MCP server globally with claude, installs the `SessionEnd` hook into `~/.claude/settings.json`, and installs agent specs to `~/.claude/memory/reference_mnemoir.md` with a minimal pointer in `~/.claude/CLAUDE.md`.
+
+**Note**: `make setup` registers mnemoir for the CLI only. The Desktop app reads its own config file. Add mnemoir to `~/Library/Application Support/Claude/claude_desktop_config.json` (macOS) or `%APPDATA%\Claude\claude_desktop_config.json` (Windows):
 
 ```json
 {
@@ -48,6 +53,22 @@ This starts Redis, builds the binary, copies config to `~/.mnemoir/config.toml`,
 }
 ```
 
+### OpenAI Codex CLI
+
+`make setup-codex` runs the same initial steps then:
+
+- Registers the MCP server via `codex mcp add` (writes to `~/.codex/config.toml`)
+- Installs a `Stop` hook (fires at the end of each turn) to close mnemoir sessions
+- Installs agent specs to `~/.codex/memory/reference_mnemoir.md` with a minimal pointer in `~/.codex/AGENTS.md`
+
+**Note**: Codex CLI uses `Stop` (per-turn) rather than a true session-end event. The hook is a no-op when no mnemoir session is active (returns 404, hook exits 0).
+
+### Other MCP Clients
+
+For clients other than claude and Codex CLI, add the server block to your MCP config file manually.
+
+Works with: Cursor, Windsurf, Continue.dev, Cline, Zed.
+
 Optional API keys (not needed with default `local` providers):
 
 ```bash
@@ -56,12 +77,6 @@ export OPENAI_API_KEY="sk-..."            # Only for OpenAI embeddings
 ```
 
 Replace `/path/to/bin/mnemoir` with the actual binary path (`which mnemoir` after `make install`, or `$(pwd)/bin/mnemoir` for local builds).
-
-## Other MCP Clients
-
-For clients other than Claude Code, add the same JSON block above to your MCP config file.
-
-Works with: Cursor, Windsurf, Continue.dev, Cline, Zed.
 
 ## Configuration
 
@@ -191,16 +206,25 @@ bin/mnemoir restore --flush --input ~/.mnemoir/backups/20260512.json \
 
 ```bash
 make help           # Show all targets
-make setup          # Full install (docker + build + config + MCP + hook + specs)
 make build          # Build binary
 make test           # Run tests
 make docker-up      # Start Redis Stack
 make docker-down    # Stop Redis Stack
 make redis-ui       # Open RedisInsight (http://localhost:8001)
+
+# claude
+make setup          # Full install (docker + build + config + MCP + hook + specs)
 make mcp            # Register MCP (project-local)
 make mcp-global     # Register MCP (all projects)
 make hook           # Install SessionEnd hook
 make specs          # Install agent specs into ~/.claude/memory/
+
+# OpenAI Codex CLI
+make setup-codex    # Full install for Codex CLI
+make mcp-codex      # Register MCP with Codex CLI
+make hook-codex     # Install Stop hook
+make specs-codex    # Install agent specs into ~/.codex/AGENTS.md
+
 make backup         # Hot backup Redis data dir via BGSAVE (default: ~/.mnemoir/backups/YYYYMMDD)
 make restore        # Cold restore Redis data dir (INPUT=path/to/dir)
 make backup-json    # Dump memories to JSON (default: ~/.mnemoir/backups/YYYYMMDD.json)
@@ -215,7 +239,7 @@ Redis data persists in `./data/` (gitignored, capped at 512MB). Run `make clean-
 
 ## Agent Specs
 
-See [docs/agent-specs.md](docs/agent-specs.md) for the ready-to-copy prompt block that teaches agents how to use mnemoir. Installed automatically by `make setup` into `~/.claude/memory/reference_mnemoir.md` (Claude Code auto-memory), with a minimal behavioral pointer in `~/.claude/CLAUDE.md`.
+See [docs/agent-specs.md](docs/agent-specs.md) for the ready-to-copy prompt block that teaches agents how to use mnemoir. Installed automatically by `make setup` (claude) or `make setup-codex` (Codex CLI). For other clients, copy the content after the `---` separator into your agent's system prompt.
 
 ## TODO
 

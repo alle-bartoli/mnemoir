@@ -33,3 +33,6 @@ coverage.html
 
 # OS
 Thumbs.db
+
+# AI
+.claude/

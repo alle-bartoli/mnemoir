@@ -2,12 +2,15 @@
 
 Ready-to-install specs that teach AI agents how to use mnemoir.
 
-**Installation target**: `~/.claude/memory/reference_mnemoir.md` (Claude Code auto-memory file).
-A minimal behavioral pointer is also added to `~/.claude/CLAUDE.md`.
+**Installation targets:**
 
-Run `make specs` to install, or `make setup` for full installation.
+- claude: `~/.claude/memory/reference_mnemoir.md` + pointer in `~/.claude/CLAUDE.md`
+- Codex CLI: `~/.codex/memory/reference_mnemoir.md` + pointer in `~/.codex/AGENTS.md`
 
-For non-Claude Code agents, copy the content below the `---` separator into your agent's system prompt.
+Run `make specs` (claude) or `make specs-codex` (Codex CLI).
+For full installation: `make setup` or `make setup-codex`.
+
+For other agents, copy the content below the `---` separator into your agent's system prompt.
 
 ---
 
@@ -119,7 +122,7 @@ end_session(observations: "Renamed Makefile targets mcp-register -> mcp,
   and CHANGELOG. User prefers short target names over verbose ones.")
 ```
 
-**Fallback**: If the user kills the session (`ctrl+c`) before you can call `end_session`, the Claude Code `SessionEnd` hook calls the `/end-session` HTTP endpoint automatically with a minimal observation. This is a safety net, not a replacement. Always call `end_session` yourself when possible, since your observations are far richer than the hook's generic message.
+**Fallback**: If the user kills the session (`ctrl+c`) before you can call `end_session`, the `SessionEnd` hook (claude) or `Stop` hook (Codex CLI) calls the `/end-session` HTTP endpoint automatically with a minimal observation. This is a safety net, not a replacement. Always call `end_session` yourself when possible, since your observations are far richer than the hook's generic message.
 
 ### Utility tools
 
