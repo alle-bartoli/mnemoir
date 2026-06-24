@@ -1,0 +1,264 @@
+# yaml-language-server: $schema=https://taskfile.dev/schema.json
+
+version: "3"
+
+dotenv: [".env"]
+
+vars:
+  BINARY: mnemoir
+  BIN_DIR: bin
+  CMD_DIR: ./cmd/mnemoir
+  CONFIG_DIR: "{{.HOME}}/.mnemoir"
+  REDIS_UI_URL: "http://localhost:8001"
+
+tasks:
+  default:
+    silent: true
+    cmds:
+      - task --list
+
+  # ---------------------------------------------------------------------------
+  # Build
+  # ---------------------------------------------------------------------------
+  build:
+    desc: Build binary for current OS/ARCH
+    cmds:
+      - CGO_ENABLED=0 go build -o {{.BIN_DIR}}/{{.BINARY}} {{.CMD_DIR}}
+
+  build:all:
+    desc: Cross-compile for all supported platforms
+    deps:
+      - build:darwin-arm64
+      - build:darwin-amd64
+      - build:linux-amd64
+      - build:windows-amd64
+
+  build:darwin-arm64:
+    desc: Build for macOS Apple Silicon
+    cmds:
+      - task: build:cross
+        vars: { GOOS: darwin, GOARCH: arm64 }
+
+  build:darwin-amd64:
+    desc: Build for macOS Intel
+    cmds:
+      - task: build:cross
+        vars: { GOOS: darwin, GOARCH: amd64 }
+
+  build:linux-amd64:
+    desc: Build for Linux x86_64
+    cmds:
+      - task: build:cross
+        vars: { GOOS: linux, GOARCH: amd64 }
+
+  build:windows-amd64:
+    desc: Build for Windows x86_64
+    cmds:
+      - task: build:cross
+        vars: { GOOS: windows, GOARCH: amd64, EXT: .exe }
+
+  build:cross:
+    internal: true
+    cmds:
+      - "CGO_ENABLED=0 GOOS={{.GOOS}} GOARCH={{.GOARCH}} go build -o {{.BIN_DIR}}/{{.BINARY}}-{{.GOOS}}-{{.GOARCH}}{{.EXT}} {{.CMD_DIR}}"
+
+  # ---------------------------------------------------------------------------
+  # Core
+  # ---------------------------------------------------------------------------
+  install:
+    desc: Install binary to $GOPATH/bin
+    cmds:
+      - go install {{.CMD_DIR}}
+
+  uninstall:
+    desc: Remove binary, MCP registrations, hooks, specs, and config
+    cmds:
+      - echo "Removing binary from GOPATH..."
+      - rm -f $(go env GOPATH)/bin/{{.BINARY}}
+      - echo "Removing claude MCP registration..."
+      - claude mcp remove {{.BINARY}} 2>/dev/null || true
+      - echo "Removing claude SessionEnd hook..."
+      - ./scripts/uninstall-hook.sh 2>/dev/null || true
+      - echo "Removing agent specs from ~/.claude/..."
+      - ./scripts/uninstall-specs.sh 2>/dev/null || true
+      - echo "Removing Codex CLI MCP registration..."
+      - ./scripts/uninstall-mcp-codex.sh 2>/dev/null || true
+      - echo "Removing Codex CLI Stop hook..."
+      - ./scripts/uninstall-hook-codex.sh 2>/dev/null || true
+      - echo "Removing agent specs from ~/.codex/..."
+      - ./scripts/uninstall-specs-codex.sh 2>/dev/null || true
+      - echo "Removing config directory {{.CONFIG_DIR}}..."
+      - rm -rf {{.CONFIG_DIR}}
+      - echo "Removing build artifacts..."
+      - rm -rf {{.BIN_DIR}}
+      - echo "mnemoir uninstalled."
+
+  test:
+    desc: Run all tests
+    cmds:
+      - go test ./...
+
+  # ---------------------------------------------------------------------------
+  # Docker / Redis
+  # ---------------------------------------------------------------------------
+  docker:up:
+    desc: Start Redis Stack (Redis + RedisInsight)
+    cmds:
+      - docker compose up -d
+
+  docker:down:
+    desc: Stop Redis Stack
+    cmds:
+      - docker compose down
+
+  redis:ui:
+    desc: Open RedisInsight web UI
+    cmds:
+      - echo "Opening RedisInsight at {{.REDIS_UI_URL}}"
+      - "open {{.REDIS_UI_URL}} || xdg-open {{.REDIS_UI_URL}} || start {{.REDIS_UI_URL}} || echo 'Please open {{.REDIS_UI_URL}} manually'"
+
+  # ---------------------------------------------------------------------------
+  # Claude
+  # ---------------------------------------------------------------------------
+  setup:
+    desc: Full install for claude (docker + build + config + MCP + hook + specs)
+    deps:
+      - docker:up
+      - build
+    cmds:
+      - mkdir -p {{.CONFIG_DIR}} && chmod 700 {{.CONFIG_DIR}}
+      - |
+        if [ ! -f {{.CONFIG_DIR}}/config.toml ]; then
+          cp config/default.toml {{.CONFIG_DIR}}/config.toml
+          chmod 600 {{.CONFIG_DIR}}/config.toml
+          echo "Config copied to {{.CONFIG_DIR}}/config.toml"
+        else
+          echo "Config already exists at {{.CONFIG_DIR}}/config.toml"
+        fi
+      - |
+        if [ -z "$MNEMOIR_REDIS_PASSWORD" ]; then
+          echo "WARNING: MNEMOIR_REDIS_PASSWORD is not set. Set it before starting Redis."
+        fi
+      - task: mcp:global
+      - task: hook
+      - task: specs
+      - echo ""
+      - echo "Setup complete. Edit {{.CONFIG_DIR}}/config.toml to customize."
+
+  mcp:
+    desc: Register MCP server with claude (project-local)
+    deps: [build]
+    preconditions:
+      - sh: '[ -n "$MNEMOIR_REDIS_PASSWORD" ]'
+        msg: "MNEMOIR_REDIS_PASSWORD is not set. Set it in .env or export it."
+    cmds:
+      - 'claude mcp add {{.BINARY}} -s local -t stdio -e MNEMOIR_REDIS_PASSWORD="$MNEMOIR_REDIS_PASSWORD" -- {{.ROOT_DIR}}/{{.BIN_DIR}}/{{.BINARY}} --config {{.CONFIG_DIR}}/config.toml'
+
+  mcp:global:
+    desc: Register MCP server globally (all claude projects)
+    deps: [build]
+    preconditions:
+      - sh: '[ -n "$MNEMOIR_REDIS_PASSWORD" ]'
+        msg: "MNEMOIR_REDIS_PASSWORD is not set. Set it in .env or export it."
+    cmds:
+      - 'claude mcp add {{.BINARY}} -s user -t stdio -e MNEMOIR_REDIS_PASSWORD="$MNEMOIR_REDIS_PASSWORD" -- {{.ROOT_DIR}}/{{.BIN_DIR}}/{{.BINARY}} --config {{.CONFIG_DIR}}/config.toml'
+
+  hook:
+    desc: Install claude SessionEnd hook
+    cmds:
+      - ./scripts/install-hook.sh {{.ROOT_DIR}}/scripts/session-end-hook.sh
+
+  specs:
+    desc: Install agent specs into ~/.claude/memory/
+    cmds:
+      - ./scripts/install-specs.sh {{.ROOT_DIR}}/docs/agent-specs.md
+
+  # ---------------------------------------------------------------------------
+  # Codex
+  # ---------------------------------------------------------------------------
+  setup:codex:
+    desc: Full install for Codex CLI (docker + build + config + MCP + hook + specs)
+    deps:
+      - docker:up
+      - build
+    cmds:
+      - mkdir -p {{.CONFIG_DIR}} && chmod 700 {{.CONFIG_DIR}}
+      - |
+        if [ ! -f {{.CONFIG_DIR}}/config.toml ]; then
+          cp config/default.toml {{.CONFIG_DIR}}/config.toml
+          chmod 600 {{.CONFIG_DIR}}/config.toml
+          echo "Config copied to {{.CONFIG_DIR}}/config.toml"
+        else
+          echo "Config already exists at {{.CONFIG_DIR}}/config.toml"
+        fi
+      - |
+        if [ -z "$MNEMOIR_REDIS_PASSWORD" ]; then
+          echo "WARNING: MNEMOIR_REDIS_PASSWORD is not set. Set it before starting Redis."
+        fi
+      - task: mcp:codex
+      - task: hook:codex
+      - task: specs:codex
+      - echo ""
+      - echo "Setup complete. Edit {{.CONFIG_DIR}}/config.toml to customize."
+
+  mcp:codex:
+    desc: Register MCP server with Codex CLI
+    deps: [build]
+    cmds:
+      - ./scripts/install-mcp-codex.sh {{.ROOT_DIR}}/{{.BIN_DIR}}/{{.BINARY}}
+
+  hook:codex:
+    desc: Install Codex CLI Stop hook
+    cmds:
+      - ./scripts/install-hook-codex.sh {{.ROOT_DIR}}/scripts/session-end-hook.sh
+
+  specs:codex:
+    desc: Install agent specs into ~/.codex/AGENTS.md
+    cmds:
+      - ./scripts/install-specs-codex.sh {{.ROOT_DIR}}/docs/agent-specs.md
+
+  # ---------------------------------------------------------------------------
+  # Backup / Restore
+  # ---------------------------------------------------------------------------
+  backup:
+    desc: "Hot backup Redis data dir via BGSAVE"
+    cmds:
+      - './scripts/backup-native.sh "{{.OUTPUT | default (printf "%s/backups/%s" .CONFIG_DIR (now | date "20060102"))}}"'
+
+  restore:
+    desc: Cold restore Redis data dir (INPUT=path/to/backup-dir)
+    preconditions:
+      - sh: '[ -n "{{.INPUT}}" ]'
+        msg: "Usage: task restore INPUT=path/to/backup-dir"
+    cmds:
+      - ./scripts/restore-native.sh {{.INPUT}}
+
+  backup:json:
+    desc: "Dump all memories to JSON"
+    deps: [build]
+    cmds:
+      - '{{.BIN_DIR}}/{{.BINARY}} backup --config {{.CONFIG_DIR}}/config.toml --output "{{.OUTPUT | default (printf "%s/backups/%s.json" .CONFIG_DIR (now | date "20060102"))}}"'
+
+  restore:json:
+    desc: Restore memories from JSON (INPUT=path/to/backup.json)
+    deps: [build]
+    preconditions:
+      - sh: '[ -n "{{.INPUT}}" ]'
+        msg: "Usage: task restore:json INPUT=path/to/backup.json"
+    cmds:
+      - "{{.BIN_DIR}}/{{.BINARY}} restore --config {{.CONFIG_DIR}}/config.toml --input {{.INPUT}}"
+
+  # ---------------------------------------------------------------------------
+  # Cleanup
+  # ---------------------------------------------------------------------------
+  clean:
+    desc: Remove build artifacts
+    cmds:
+      - rm -rf {{.BIN_DIR}}
+
+  clean:data:
+    desc: Stop Redis and wipe all stored memories (data/)
+    deps: [docker:down]
+    cmds:
+      - rm -rf data/
+      - echo "Redis data wiped. Run 'task docker:up' to start fresh."

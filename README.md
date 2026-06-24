@@ -12,21 +12,82 @@ Fully offline-capable, no API keys required.
 - **Typed memories**: `fact`, `concept`, `narrative` with automatic classification
 - **Session management**: start/end sessions with automatic summarization
 - **Multi-project**: scoped memories per project
-- **9 MCP tools**: `store_memory`, `recall`, `forget`, `update_memory`, `start_session`, `end_session`, `list_projects`, `memory_stats`, `rename_project`
+- **9 MCP tools**:
+  - `store_memory`,
+  - `recall`,
+  - `forget`,
+  - `update_memory`,
+  - `start_session`,
+  - `end_session`,
+  - `list_projects`,
+  - `memory_stats`,
+  - `rename_project`
 
 ## Prerequisites
 
-Install these before cloning:
+| Dependency                                    | Version         | Purpose                     |
+| --------------------------------------------- | --------------- | --------------------------- |
+| [Go](https://go.dev/dl/)                      | 1.25+           | Build the binary            |
+| [Docker](https://docs.docker.com/get-docker/) | with Compose v2 | Run Redis Stack             |
+| [Task](https://taskfile.dev/installation/)    | 3.x             | Task runner (replaces Make) |
+| [jq](https://jqlang.github.io/jq/download/)   | any             | Used by install scripts     |
+
+**macOS / Linux (Homebrew)**
 
 ```bash
-# macOS (Homebrew)
-brew install go docker docker-compose jq
+brew install go docker docker-compose go-task jq
 
 # Start Docker Desktop (required for Redis)
 open -a Docker
 ```
 
-Go 1.25+, Docker with Compose v2, and `jq` are required. Tested on macOS Tahoe 26.4 / Apple M1 Pro (arm64); Linux and other architectures may work but are untested.
+**Linux (apt)**
+
+```bash
+sudo apt update && sudo apt install -y golang docker.io docker-compose-v2 jq
+sudo systemctl start docker
+
+# Install Task
+sh -c "$(curl --location https://taskfile.dev/install.sh)" -- -d -b /usr/local/bin
+```
+
+**Windows (PowerShell)**
+
+```powershell
+# winget
+winget install GoLang.Go Docker.DockerDesktop Task.Task stedolan.jq
+
+# or Chocolatey
+choco install golang docker-desktop task jq
+
+# or Scoop
+scoop install go docker task jq
+
+# Start Docker Desktop, then enable WSL 2 backend if prompted
+```
+
+> Windows requires Docker Desktop with WSL 2 backend for Redis Stack.
+
+### Supported platforms
+
+| Platform | Architecture          | Status           |
+| -------- | --------------------- | ---------------- |
+| macOS    | Apple Silicon (arm64) | Tested           |
+| macOS    | Intel (amd64)         | Builds, untested |
+| Linux    | x86_64 (amd64)        | Builds, untested |
+| Windows  | x86_64 (amd64)        | Builds, untested |
+
+### Client support
+
+| Client                       | Setup              | MCP    | Hook         | Specs  |
+| ---------------------------- | ------------------ | ------ | ------------ | ------ |
+| Claude Code (CLI)            | `task setup`       | auto   | `SessionEnd` | auto   |
+| OpenAI Codex CLI             | `task setup:codex` | auto   | `Stop`       | auto   |
+| Claude Desktop               | manual             | manual | none         | manual |
+| Pi                           | manual             | manual | none         | manual |
+| Cursor, Windsurf, Cline, Zed | manual             | manual | none         | manual |
+
+Clients without a hook require the agent to call `end_session` manually before the conversation ends.
 
 ## Installation
 
@@ -45,7 +106,7 @@ Replace `your-secret` with any strong password. The `.env` file is gitignored.
 ### 2. Install the binary
 
 ```bash
-make install
+task install
 ```
 
 This builds the binary and installs it to `$(go env GOPATH)/bin/mnemoir`. Verify:
@@ -56,25 +117,26 @@ which mnemoir   # should print e.g. /Users/you/go/bin/mnemoir
 
 ### 3. Run setup for your AI client
 
-**claude (CLI):**
+#### Claude Code (CLI) - full support
 
 ```bash
-make setup
+task setup
 ```
 
-Starts Redis, copies config to `~/.mnemoir/config.toml`, registers the MCP server with claude globally, installs the `SessionEnd` hook, and installs agent specs.
+Starts Redis, copies config to `~/.mnemoir/config.toml`, registers the MCP server globally, installs the `SessionEnd` hook, and installs agent specs.
+The `SessionEnd` hook calls `/end-session` automatically when a conversation ends, so memories are never lost even if you forget to call `end_session`.
 
-**OpenAI Codex CLI:**
+#### OpenAI Codex CLI - full support
 
 ```bash
-make setup-codex
+task setup:codex
 ```
 
-Same steps, targeting `~/.codex/config.toml` and `~/.codex/AGENTS.md`.
+Same as above, targeting `~/.codex/config.toml` and `~/.codex/AGENTS.md`. Uses the `Stop` hook (fires per-turn) instead of `SessionEnd`.
 
-### 4. Claude Desktop (optional)
+#### Claude Desktop - manual setup, no hook
 
-`make setup` registers mnemoir for the claude CLI only. To use it in Claude Desktop, add it manually to the config file:
+`task setup` does **not** cover Claude Desktop. Add it manually to the config file:
 
 - macOS: `~/Library/Application Support/Claude/claude_desktop_config.json`
 - Windows: `%APPDATA%\Claude\claude_desktop_config.json`
@@ -91,13 +153,20 @@ Same steps, targeting `~/.codex/config.toml` and `~/.codex/AGENTS.md`.
 }
 ```
 
-Use absolute paths (no `~`). Replace `/Users/you` with your actual home directory (`echo $HOME`).
+Use absolute paths (no `~`).  
+Replace `/Users/you` with your actual home directory (`echo $HOME`).  
 Restart Claude Desktop after saving.
 
-### Other MCP Clients
+Claude Desktop has no session-end hook.  
+The agent must call `end_session` manually before the conversation ends, or memories from that session will be lost.
 
-Add the same `mcpServers` block above to your client's config file.
-Works with: Cursor, Windsurf, Continue.dev, Cline, Zed.
+#### Pi, Cursor, Windsurf, Cline, Zed, Continue.dev - manual setup, no hook
+
+Any MCP-compatible client can use mnemoir. Add the same `mcpServers` JSON block above to your client's config file.
+
+These clients lack a session-end hook.  
+The agent must call `end_session` manually before the conversation ends.
+Copy the agent specs from [docs/agent-specs.md](docs/agent-specs.md) (content after the `---` separator) into your agent's system prompt so it knows the lifecycle.
 
 ### Optional API keys
 
@@ -126,7 +195,7 @@ codesign --force --deep --sign - "$(go env GOPATH)/bin/mnemoir"
 
 Restart Claude Desktop after either fix.
 
-**Binary not found after `make install`**
+**Binary not found after `task install`**
 
 `$(go env GOPATH)/bin` must be on your `PATH`. Add to `~/.zshrc` or `~/.bashrc`:
 
@@ -198,7 +267,8 @@ Both thresholds are configurable via `maintenance.forget_threshold` and `mainten
 
 ## Backup & Restore
 
-Two complementary strategies are available. Use **native** for routine backups and disaster recovery; use **JSON** for portability, cross-host migrations, or human-readable snapshots.
+Two complementary strategies are available.  
+Use **native** for routine backups and disaster recovery; use **JSON** for portability, cross-host migrations, or human-readable snapshots.
 
 ### Native backup (recommended)
 
@@ -207,13 +277,13 @@ Captures the full Redis dataset (RDB + AOF) with a single atomic BGSAVE. Redis k
 ```bash
 # Backup — triggers BGSAVE, waits for completion, copies data/
 # Default output: ~/.mnemoir/backups/YYYYMMDD
-make backup
+task backup
 
 # Override output location
-make backup OUTPUT=~/my-backups/$(date +%Y%m%d)
+task backup OUTPUT=~/my-backups/$(date +%Y%m%d)
 
 # Restore — stops Redis, replaces data/, restarts Redis
-make restore INPUT=~/.mnemoir/backups/20260512
+task restore INPUT=~/.mnemoir/backups/20260512
 ```
 
 **When to use**: daily snapshots, disaster recovery, same-machine restores.
@@ -224,18 +294,19 @@ make restore INPUT=~/.mnemoir/backups/20260512
 
 ### JSON backup
 
-Exports all memories, sessions, projects, and tag frequencies to a portable JSON file. Embedding vectors are stored as base64 of the raw `float32` bytes, so no re-embedding is needed at restore time.
+Exports all memories, sessions, projects, and tag frequencies to a portable JSON file.
+Embedding vectors are stored as base64 of the raw `float32` bytes, so no re-embedding is needed at restore time.
 
 ```bash
 # Backup — writes indented JSON
 # Default output: ~/.mnemoir/backups/YYYYMMDD.json
-make backup-json
+task backup:json
 
 # Override output location
-make backup-json OUTPUT=~/my-backups/snapshot.json
+task backup:json OUTPUT=~/my-backups/snapshot.json
 
 # Restore (additive — merges with existing data)
-make restore-json INPUT=~/.mnemoir/backups/20260512.json
+task restore:json INPUT=~/.mnemoir/backups/20260512.json
 
 # Restore (clean — wipes DB first, then restores)
 bin/mnemoir restore --flush --input ~/.mnemoir/backups/20260512.json \
@@ -246,11 +317,11 @@ bin/mnemoir restore --flush --input ~/.mnemoir/backups/20260512.json \
 
 **Guarantees**: embedding vectors are bit-exact (no re-inference). Restore validates the embedding dimension against the live RediSearch index before writing any data — a dimension mismatch returns a clear error with no partial writes. After restore, the command blocks until RediSearch finishes re-indexing (up to 2 minutes) and prints a warning if the timeout is reached.
 
-**Restore caveats**: JSON backup is **not atomic** — concurrent writes during `backup-json` may produce an inconsistent snapshot. Stop the MCP server or use `make backup` if consistency is required. Without `--flush`, restore is additive (existing keys are overwritten on conflict but unrelated keys are left intact).
+**Restore caveats**: JSON backup is **not atomic** — concurrent writes during `backup-json` may produce an inconsistent snapshot. Stop the MCP server or use `task backup` if consistency is required. Without `--flush`, restore is additive (existing keys are overwritten on conflict but unrelated keys are left intact).
 
 ### Choosing between the two
 
-|                             | Native (`make backup`) | JSON (`make backup-json`) |
+|                             | Native (`task backup`) | JSON (`task backup:json`) |
 | --------------------------- | ---------------------- | ------------------------- |
 | Atomic snapshot             | Yes (BGSAVE)           | No                        |
 | Redis must be local Docker  | Yes                    | No                        |
@@ -263,47 +334,46 @@ bin/mnemoir restore --flush --input ~/.mnemoir/backups/20260512.json \
 ## Development
 
 ```bash
-make help           # Show all targets
-make build          # Build binary
-make test           # Run tests
-make docker-up      # Start Redis Stack
-make docker-down    # Stop Redis Stack
-make redis-ui       # Open RedisInsight (http://localhost:8001)
+task --list          # Show all targets
+task build           # Build binary (current platform)
+task build:all       # Cross-compile for all supported platforms
+task test            # Run tests
+task docker:up       # Start Redis Stack
+task docker:down     # Stop Redis Stack
+task redis:ui        # Open RedisInsight (http://localhost:8001)
 
 # claude
-make setup          # Full install (docker + build + config + MCP + hook + specs)
-make mcp            # Register MCP (project-local)
-make mcp-global     # Register MCP (all projects)
-make hook           # Install SessionEnd hook
-make specs          # Install agent specs into ~/.claude/memory/
+task setup           # Full install (docker + build + config + MCP + hook + specs)
+task mcp             # Register MCP (project-local)
+task mcp:global      # Register MCP (all projects)
+task hook            # Install SessionEnd hook
+task specs           # Install agent specs into ~/.claude/memory/
 
 # OpenAI Codex CLI
-make setup-codex    # Full install for Codex CLI
-make mcp-codex      # Register MCP with Codex CLI
-make hook-codex     # Install Stop hook
-make specs-codex    # Install agent specs into ~/.codex/AGENTS.md
+task setup:codex     # Full install for Codex CLI
+task mcp:codex       # Register MCP with Codex CLI
+task hook:codex      # Install Stop hook
+task specs:codex     # Install agent specs into ~/.codex/AGENTS.md
 
-make backup         # Hot backup Redis data dir via BGSAVE (default: ~/.mnemoir/backups/YYYYMMDD)
-make restore        # Cold restore Redis data dir (INPUT=path/to/dir)
-make backup-json    # Dump memories to JSON (default: ~/.mnemoir/backups/YYYYMMDD.json)
-make restore-json   # Restore memories from JSON (INPUT=path/to/file.json)
-make clean          # Remove build artifacts
-make clean-data     # Stop Redis + wipe data/
-make install        # Install to $GOPATH/bin
-make uninstall      # Remove everything (binary, MCP, config, hook, specs)
+task backup          # Hot backup Redis data dir via BGSAVE
+task restore         # Cold restore Redis data dir (INPUT=path/to/dir)
+task backup:json     # Dump memories to JSON
+task restore:json    # Restore memories from JSON (INPUT=path/to/file.json)
+task clean           # Remove build artifacts
+task clean:data      # Stop Redis + wipe data/
+task install         # Install to $GOPATH/bin
+task uninstall       # Remove everything (binary, MCP, config, hook, specs)
 ```
 
-Redis data persists in `./data/` (gitignored, capped at 512MB). Run `make clean-data` to reclaim disk space.
+Redis data persists in `./data/` (gitignored, capped at 512MB). Run `task clean:data` to reclaim disk space.
 
 ## Agent Specs
 
-See [docs/agent-specs.md](docs/agent-specs.md) for the ready-to-copy prompt block that teaches agents how to use mnemoir. Installed automatically by `make setup` (claude) or `make setup-codex` (Codex CLI). For other clients, copy the content after the `---` separator into your agent's system prompt.
+See [docs/agent-specs.md](docs/agent-specs.md) for the prompt block that teaches agents how to use mnemoir.
 
-## TODO
-
-- [x] Project rename
-- [ ] Cross-project recall
-- [x] Memory export/import (JSON backup/restore + native BGSAVE)
+- **Claude Code**: installed automatically by `task setup`
+- **Codex CLI**: installed automatically by `task setup:codex`
+- **All other clients** (Pi, Claude Desktop, Cursor, etc.): copy the content after the `---` separator into your agent's system prompt manually
 
 ## License
 

@@ -5,26 +5,40 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased] - 2026-06-24 (Alessandro Bartoli)
+
+### Added
+
+- **Cross-platform build**: `task build:all` cross-compiles for macOS arm64,
+  macOS amd64, Linux amd64, and Windows amd64
+- **Taskfile**: migrated from `Makefile` to `Taskfile.yml` for cross-platform
+  task runner support; all targets use `:` namespace separator
+  (e.g., `task docker:up`, `task backup:json`, `task setup:codex`)
+
+### Removed
+
+- **Makefile**: replaced by `Taskfile.yml`
+
 ## [Unreleased] - 2026-06-21 (Alessandro Bartoli)
 
 ### Added
 
-- **OpenAI Codex CLI auto-install**: `make setup-codex` covers the full Codex
+- **OpenAI Codex CLI auto-install**: `task setup:codex` covers the full Codex
   client setup in one command (Docker, build, config, MCP, hook, specs)
-   - `make mcp-codex`: registers mnemoir via `codex mcp add`, writing the server
+   - `task mcp:codex`: registers mnemoir via `codex mcp add`, writing the server
      entry to `~/.codex/config.toml`
-   - `make hook-codex`: appends a `[[hooks.Stop]]` block to `~/.codex/config.toml`
+   - `task hook:codex`: appends a `[[hooks.Stop]]` block to `~/.codex/config.toml`
      so mnemoir sessions close at the end of each Codex turn; the hook is a no-op
      when no session is active
-   - `make specs-codex`: writes agent specs to `~/.codex/memory/reference_mnemoir.md`
+   - `task specs:codex`: writes agent specs to `~/.codex/memory/reference_mnemoir.md`
      and a lifecycle pointer to `~/.codex/AGENTS.md`
-   - Corresponding `uninstall-*-codex.sh` scripts; `make uninstall` removes
+   - Corresponding `uninstall-*-codex.sh` scripts; `task uninstall` removes
      Codex CLI artifacts alongside claude artifacts
 
 ### Changed
 
 - **Client label in help and docs**: "Claude Code" renamed to "claude" in
-  `make help` output, README, and `docs/agent-specs.md`
+  `task --list` output, README, and `docs/agent-specs.md`
 - **Hook fallback note in agent specs**: updated to mention both the `SessionEnd`
   hook (claude) and the `Stop` hook (Codex CLI) as safety nets for ungraceful
   session termination

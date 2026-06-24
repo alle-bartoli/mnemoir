@@ -7,8 +7,8 @@ Ready-to-install specs that teach AI agents how to use mnemoir.
 - claude: `~/.claude/memory/reference_mnemoir.md` + pointer in `~/.claude/CLAUDE.md`
 - Codex CLI: `~/.codex/memory/reference_mnemoir.md` + pointer in `~/.codex/AGENTS.md`
 
-Run `make specs` (claude) or `make specs-codex` (Codex CLI).
-For full installation: `make setup` or `make setup-codex`.
+Run `task specs` (claude) or `task specs:codex` (Codex CLI).
+For full installation: `task setup` or `task setup:codex`.
 
 For other agents, copy the content below the `---` separator into your agent's system prompt.
 
