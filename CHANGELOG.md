@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased] - 2026-06-24 (Alessandro Bartoli)
 
+### Fixed
+
+- **Windows installation docs**: added `Get-Command` as Windows alternative to
+  `which`, PowerShell instructions for adding Go bin to `PATH`, and
+  `$env:USERPROFILE` hint for resolving the home directory
+
 ### Added
 
 - **Cross-platform build**: `task build:all` cross-compiles for macOS arm64,

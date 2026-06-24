@@ -112,7 +112,11 @@ task install
 This builds the binary and installs it to `$(go env GOPATH)/bin/mnemoir`. Verify:
 
 ```bash
+# macOS / Linux
 which mnemoir   # should print e.g. /Users/you/go/bin/mnemoir
+
+# Windows (PowerShell)
+Get-Command mnemoir   # should print e.g. C:\Users\you\go\bin\mnemoir.exe
 ```
 
 ### 3. Run setup for your AI client
@@ -154,7 +158,7 @@ Same as above, targeting `~/.codex/config.toml` and `~/.codex/AGENTS.md`. Uses t
 ```
 
 Use absolute paths (no `~`).  
-Replace `/Users/you` with your actual home directory (`echo $HOME`).  
+Replace `/Users/you` with your actual home directory (`echo $HOME` on macOS/Linux, `echo $env:USERPROFILE` on Windows PowerShell).  
 Restart Claude Desktop after saving.
 
 Claude Desktop has no session-end hook.  
@@ -197,13 +201,24 @@ Restart Claude Desktop after either fix.
 
 **Binary not found after `task install`**
 
-`$(go env GOPATH)/bin` must be on your `PATH`. Add to `~/.zshrc` or `~/.bashrc`:
+`$(go env GOPATH)/bin` must be on your `PATH`.
+
+*macOS / Linux* - add to `~/.zshrc` or `~/.bashrc`:
 
 ```bash
 export PATH="$PATH:$(go env GOPATH)/bin"
 ```
 
 Then reload: `source ~/.zshrc`
+
+*Windows (PowerShell)* - add to your user `PATH` permanently:
+
+```powershell
+$gobin = go env GOPATH | ForEach-Object { Join-Path $_ "bin" }
+[Environment]::SetEnvironmentVariable("Path", "$env:Path;$gobin", "User")
+```
+
+Then restart your terminal for the change to take effect.
 
 ## Configuration
 
