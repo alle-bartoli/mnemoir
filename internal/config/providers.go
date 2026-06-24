@@ -20,6 +20,7 @@ const (
 	EnvOpenAIAPIKey    = "OPENAI_API_KEY"
 	EnvHome            = "HOME"
 	EnvRedisPassword   = "MNEMOIR_REDIS_PASSWORD"
+	EnvConfigPath      = "MNEMOIR_CONFIG"
 )
 
 // Default configuration values shared between config defaults and provider constructors.

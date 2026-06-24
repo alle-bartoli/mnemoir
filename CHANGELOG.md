@@ -5,33 +5,53 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased] - 2026-06-24 (Alessandro Bartoli)
+## [Unreleased] - 2026-06-24 (Marco Bartoli)
 
 ### Fixed
 
-- **MCP registration idempotency**: `task mcp` and `task mcp:global` now remove
-  existing entries before re-adding, preventing `already exists` errors on
-  repeated `task setup` runs
-- **Windows CRLF line endings**: added `.gitattributes` to force LF for `*.sh`,
-  `*.toml`, and `*.yml` files, preventing `$'\r': command not found` errors
-  when Git on Windows converts line endings via `core.autocrlf`
-- **Windows script execution**: prefix all `scripts/*.sh` invocations with
-  `bash` in `Taskfile.yml`, fixing `fork/exec *.sh: not a valid Win32
-  application` errors on Windows (Task defaults to `cmd.exe` on Windows and
-  cannot execute `.sh` files directly)
-- **Windows prerequisites**: added Git as a required dependency (provides bash
-  on Windows); added `Git.Git` / `git` to all Windows install commands
-- **Windows installation docs**: added `Get-Command` as Windows alternative to
-  `which`, PowerShell instructions for adding Go bin to `PATH`, and
-  `$env:USERPROFILE` hint for resolving the home directory
+- **Windows MCP binary suffix (MCP error `-32000`)**: `task build` and the
+  `mcp`/`mcp:global` registrations emitted and referenced an extensionless
+  `bin/mnemoir`; Node-spawned MCP clients (Claude Code) cannot launch a
+  suffix-less Windows executable. Build output and both registrations now append
+  `.exe` via a `BIN_EXT` var; the Codex script defaults to `mnemoir.exe` on
+  `windows`
+
+## [Unreleased] - 2026-06-24 (Alessandro Bartoli)
 
 ### Added
 
-- **Cross-platform build**: `task build:all` cross-compiles for macOS arm64,
-  macOS amd64, Linux amd64, and Windows amd64
-- **Taskfile**: migrated from `Makefile` to `Taskfile.yml` for cross-platform
-  task runner support; all targets use `:` namespace separator
-  (e.g., `task docker:up`, `task backup:json`, `task setup:codex`)
+- **`MNEMOIR_CONFIG` env var**: config path via env (precedence `--config` >
+  `MNEMOIR_CONFIG` > `~/.mnemoir`); MCP registration uses it so spaced home paths
+  survive the spawn
+- **Cross-platform build**: `task build:all` targets macOS arm64/amd64, Linux
+  amd64, Windows amd64
+- **Taskfile**: migrated `Makefile` -> `Taskfile.yml`, `:`-namespaced targets
+
+### Fixed
+
+- **Windows local model download (`-32000`)**: hugot's HF hub symlinks cache
+  blobs; Windows `os.Symlink` needs the create-symlink privilege and fails with
+  `ERROR_PRIVILEGE_NOT_HELD`, so the embedder never initialized. Added a
+  symlink-free direct download + skip-if-present check; warm starts ~2s
+- **Local model cache location**: pinned `XDG_CACHE_HOME` to an absolute
+  owner-only dir; empty `$HOME` on Windows resolved the cache to cwd `.cache`,
+  re-downloading every spawn
+- **Windows spaced home path (`-32000`)**: `--config` was word-split on the
+  space; `task mcp`/`mcp:global` and Codex now pass `MNEMOIR_CONFIG`, Codex
+  normalizes MSYS paths via `cygpath -m`
+- **Windows WSL bash interception**: bare `bash` hit WSL bash (no `.exe` tools,
+  empty `$HOME`); added a `BASH` var defaulting to Git Bash (override
+  `MNEMOIR_BASH`), fixing `jq is required`
+- **Windows config path**: empty `$HOME` resolved `CONFIG_DIR` to `/.mnemoir`;
+  added `HOME_DIR` falling back to `USERPROFILE`, quoted all usages
+- **MCP registration idempotency**: `task mcp`/`mcp:global` remove before re-add
+- **Windows CRLF**: `.gitattributes` forces LF for `*.sh`/`*.toml`/`*.yml`
+- **Windows script execution**: prefix `scripts/*.sh` with `bash` (Task uses
+  `cmd.exe` on Windows)
+- **Windows prerequisites**: Git added as a required dep; `Git.Git`/`git` in
+  install commands
+- **Windows installation docs**: `Get-Command` for `which`, Go-bin `PATH` setup,
+  `$env:USERPROFILE` hint
 
 ### Removed
 

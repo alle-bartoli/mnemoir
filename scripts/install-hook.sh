@@ -11,7 +11,11 @@ HOOK_SCRIPT="${1:-$(cd "$(dirname "$0")" && pwd)/session-end-hook.sh}"
 SETTINGS_FILE="${HOME}/.claude/settings.json"
 
 if ! command -v jq &> /dev/null; then
-  echo "ERROR: jq is required but not installed. Install it with: brew install jq (macOS) or apt install jq (Linux)"
+  echo "ERROR: jq is required but not installed."
+  echo "  macOS:   brew install jq"
+  echo "  Linux:   apt install jq"
+  echo "  Windows: choco install jq (then reopen the terminal so PATH refreshes)"
+  echo "  Windows note: run setup from Git Bash, not WSL bash. WSL cannot see jq.exe."
   exit 1
 fi
 

@@ -7,9 +7,18 @@ dotenv: [".env"]
 vars:
   BINARY: mnemoir
   BIN_DIR: bin
+  # Windows executables require the .exe suffix or Node-spawned MCP clients
+  # (Claude Code) cannot launch the binary. Empty on POSIX.
+  BIN_EXT: '{{ternary ".exe" "" (eq OS "windows")}}'
   CMD_DIR: ./cmd/mnemoir
-  CONFIG_DIR: "{{.HOME}}/.mnemoir"
+  # On Windows PowerShell $HOME is empty (it sets USERPROFILE); fall back to it
+  # and normalize backslashes so the path works in bash, gosh, and the binary.
+  HOME_DIR: '{{.HOME | default (.USERPROFILE | replace "\\" "/")}}'
+  CONFIG_DIR: "{{.HOME_DIR}}/.mnemoir"
   REDIS_UI_URL: "http://localhost:8001"
+  # Force Git Bash on Windows: a bare `bash` resolves to WSL bash, which cannot
+  # see Windows .exe tools (jq.exe) and mangles $HOME. Override with MNEMOIR_BASH.
+  BASH: '{{.MNEMOIR_BASH | default (ternary "C:/Program Files/Git/bin/bash.exe" "bash" (eq OS "windows"))}}'
 
 tasks:
   default:
@@ -23,7 +32,7 @@ tasks:
   build:
     desc: Build binary for current OS/ARCH
     cmds:
-      - CGO_ENABLED=0 go build -o {{.BIN_DIR}}/{{.BINARY}} {{.CMD_DIR}}
+      - CGO_ENABLED=0 go build -o {{.BIN_DIR}}/{{.BINARY}}{{.BIN_EXT}} {{.CMD_DIR}}
 
   build:all:
     desc: Cross-compile for all supported platforms
@@ -74,21 +83,21 @@ tasks:
     desc: Remove binary, MCP registrations, hooks, specs, and config
     cmds:
       - echo "Removing binary from GOPATH..."
-      - rm -f $(go env GOPATH)/bin/{{.BINARY}}
+      - rm -f $(go env GOPATH)/bin/{{.BINARY}}{{.BIN_EXT}}
       - echo "Removing claude MCP registration..."
       - claude mcp remove {{.BINARY}} 2>/dev/null || true
       - echo "Removing claude SessionEnd hook..."
-      - bash ./scripts/uninstall-hook.sh 2>/dev/null || true
+      - '"{{.BASH}}" ./scripts/uninstall-hook.sh 2>/dev/null || true'
       - echo "Removing agent specs from ~/.claude/..."
-      - bash ./scripts/uninstall-specs.sh 2>/dev/null || true
+      - '"{{.BASH}}" ./scripts/uninstall-specs.sh 2>/dev/null || true'
       - echo "Removing Codex CLI MCP registration..."
-      - bash ./scripts/uninstall-mcp-codex.sh 2>/dev/null || true
+      - '"{{.BASH}}" ./scripts/uninstall-mcp-codex.sh 2>/dev/null || true'
       - echo "Removing Codex CLI Stop hook..."
-      - bash ./scripts/uninstall-hook-codex.sh 2>/dev/null || true
+      - '"{{.BASH}}" ./scripts/uninstall-hook-codex.sh 2>/dev/null || true'
       - echo "Removing agent specs from ~/.codex/..."
-      - bash ./scripts/uninstall-specs-codex.sh 2>/dev/null || true
+      - '"{{.BASH}}" ./scripts/uninstall-specs-codex.sh 2>/dev/null || true'
       - echo "Removing config directory {{.CONFIG_DIR}}..."
-      - rm -rf {{.CONFIG_DIR}}
+      - rm -rf "{{.CONFIG_DIR}}"
       - echo "Removing build artifacts..."
       - rm -rf {{.BIN_DIR}}
       - echo "mnemoir uninstalled."
@@ -126,11 +135,11 @@ tasks:
       - docker:up
       - build
     cmds:
-      - mkdir -p {{.CONFIG_DIR}} && chmod 700 {{.CONFIG_DIR}}
+      - mkdir -p "{{.CONFIG_DIR}}" && chmod 700 "{{.CONFIG_DIR}}"
       - |
-        if [ ! -f {{.CONFIG_DIR}}/config.toml ]; then
-          cp config/default.toml {{.CONFIG_DIR}}/config.toml
-          chmod 600 {{.CONFIG_DIR}}/config.toml
+        if [ ! -f "{{.CONFIG_DIR}}/config.toml" ]; then
+          cp config/default.toml "{{.CONFIG_DIR}}/config.toml"
+          chmod 600 "{{.CONFIG_DIR}}/config.toml"
           echo "Config copied to {{.CONFIG_DIR}}/config.toml"
         else
           echo "Config already exists at {{.CONFIG_DIR}}/config.toml"
@@ -153,7 +162,7 @@ tasks:
         msg: "MNEMOIR_REDIS_PASSWORD is not set. Set it in .env or export it."
     cmds:
       - claude mcp remove {{.BINARY}} -s local 2>/dev/null || true
-      - 'claude mcp add {{.BINARY}} -s local -t stdio -e MNEMOIR_REDIS_PASSWORD="$MNEMOIR_REDIS_PASSWORD" -- {{.ROOT_DIR}}/{{.BIN_DIR}}/{{.BINARY}} --config {{.CONFIG_DIR}}/config.toml'
+      - 'claude mcp add {{.BINARY}} -s local -t stdio -e MNEMOIR_REDIS_PASSWORD="$MNEMOIR_REDIS_PASSWORD" -e MNEMOIR_CONFIG="{{.CONFIG_DIR}}/config.toml" -- {{.ROOT_DIR}}/{{.BIN_DIR}}/{{.BINARY}}{{.BIN_EXT}}'
 
   mcp:global:
     desc: Register MCP server globally (all claude projects)
@@ -163,17 +172,17 @@ tasks:
         msg: "MNEMOIR_REDIS_PASSWORD is not set. Set it in .env or export it."
     cmds:
       - claude mcp remove {{.BINARY}} -s user 2>/dev/null || true
-      - 'claude mcp add {{.BINARY}} -s user -t stdio -e MNEMOIR_REDIS_PASSWORD="$MNEMOIR_REDIS_PASSWORD" -- {{.ROOT_DIR}}/{{.BIN_DIR}}/{{.BINARY}} --config {{.CONFIG_DIR}}/config.toml'
+      - 'claude mcp add {{.BINARY}} -s user -t stdio -e MNEMOIR_REDIS_PASSWORD="$MNEMOIR_REDIS_PASSWORD" -e MNEMOIR_CONFIG="{{.CONFIG_DIR}}/config.toml" -- {{.ROOT_DIR}}/{{.BIN_DIR}}/{{.BINARY}}{{.BIN_EXT}}'
 
   hook:
     desc: Install claude SessionEnd hook
     cmds:
-      - bash ./scripts/install-hook.sh {{.ROOT_DIR}}/scripts/session-end-hook.sh
+      - '"{{.BASH}}" ./scripts/install-hook.sh {{.ROOT_DIR}}/scripts/session-end-hook.sh'
 
   specs:
     desc: Install agent specs into ~/.claude/memory/
     cmds:
-      - bash ./scripts/install-specs.sh {{.ROOT_DIR}}/docs/agent-specs.md
+      - '"{{.BASH}}" ./scripts/install-specs.sh {{.ROOT_DIR}}/docs/agent-specs.md'
 
   # ---------------------------------------------------------------------------
   # Codex
@@ -184,11 +193,11 @@ tasks:
       - docker:up
       - build
     cmds:
-      - mkdir -p {{.CONFIG_DIR}} && chmod 700 {{.CONFIG_DIR}}
+      - mkdir -p "{{.CONFIG_DIR}}" && chmod 700 "{{.CONFIG_DIR}}"
       - |
-        if [ ! -f {{.CONFIG_DIR}}/config.toml ]; then
-          cp config/default.toml {{.CONFIG_DIR}}/config.toml
-          chmod 600 {{.CONFIG_DIR}}/config.toml
+        if [ ! -f "{{.CONFIG_DIR}}/config.toml" ]; then
+          cp config/default.toml "{{.CONFIG_DIR}}/config.toml"
+          chmod 600 "{{.CONFIG_DIR}}/config.toml"
           echo "Config copied to {{.CONFIG_DIR}}/config.toml"
         else
           echo "Config already exists at {{.CONFIG_DIR}}/config.toml"
@@ -207,17 +216,17 @@ tasks:
     desc: Register MCP server with Codex CLI
     deps: [build]
     cmds:
-      - bash ./scripts/install-mcp-codex.sh {{.ROOT_DIR}}/{{.BIN_DIR}}/{{.BINARY}}
+      - '"{{.BASH}}" ./scripts/install-mcp-codex.sh {{.ROOT_DIR}}/{{.BIN_DIR}}/{{.BINARY}}'
 
   hook:codex:
     desc: Install Codex CLI Stop hook
     cmds:
-      - bash ./scripts/install-hook-codex.sh {{.ROOT_DIR}}/scripts/session-end-hook.sh
+      - '"{{.BASH}}" ./scripts/install-hook-codex.sh {{.ROOT_DIR}}/scripts/session-end-hook.sh'
 
   specs:codex:
     desc: Install agent specs into ~/.codex/AGENTS.md
     cmds:
-      - bash ./scripts/install-specs-codex.sh {{.ROOT_DIR}}/docs/agent-specs.md
+      - '"{{.BASH}}" ./scripts/install-specs-codex.sh {{.ROOT_DIR}}/docs/agent-specs.md'
 
   # ---------------------------------------------------------------------------
   # Backup / Restore
@@ -225,7 +234,7 @@ tasks:
   backup:
     desc: "Hot backup Redis data dir via BGSAVE"
     cmds:
-      - 'bash ./scripts/backup-native.sh "{{.OUTPUT | default (printf "%s/backups/%s" .CONFIG_DIR (now | date "20060102"))}}"'
+      - '"{{.BASH}}" ./scripts/backup-native.sh "{{.OUTPUT | default (printf "%s/backups/%s" .CONFIG_DIR (now | date "20060102"))}}"'
 
   restore:
     desc: Cold restore Redis data dir (INPUT=path/to/backup-dir)
@@ -233,13 +242,13 @@ tasks:
       - sh: '[ -n "{{.INPUT}}" ]'
         msg: "Usage: task restore INPUT=path/to/backup-dir"
     cmds:
-      - bash ./scripts/restore-native.sh {{.INPUT}}
+      - '"{{.BASH}}" ./scripts/restore-native.sh {{.INPUT}}'
 
   backup:json:
     desc: "Dump all memories to JSON"
     deps: [build]
     cmds:
-      - '{{.BIN_DIR}}/{{.BINARY}} backup --config {{.CONFIG_DIR}}/config.toml --output "{{.OUTPUT | default (printf "%s/backups/%s.json" .CONFIG_DIR (now | date "20060102"))}}"'
+      - '{{.BIN_DIR}}/{{.BINARY}} backup --config "{{.CONFIG_DIR}}/config.toml" --output "{{.OUTPUT | default (printf "%s/backups/%s.json" .CONFIG_DIR (now | date "20060102"))}}"'
 
   restore:json:
     desc: Restore memories from JSON (INPUT=path/to/backup.json)
@@ -248,7 +257,7 @@ tasks:
       - sh: '[ -n "{{.INPUT}}" ]'
         msg: "Usage: task restore:json INPUT=path/to/backup.json"
     cmds:
-      - "{{.BIN_DIR}}/{{.BINARY}} restore --config {{.CONFIG_DIR}}/config.toml --input {{.INPUT}}"
+      - '{{.BIN_DIR}}/{{.BINARY}} restore --config "{{.CONFIG_DIR}}/config.toml" --input {{.INPUT}}'
 
   # ---------------------------------------------------------------------------
   # Cleanup

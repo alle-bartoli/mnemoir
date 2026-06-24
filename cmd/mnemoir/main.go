@@ -35,7 +35,14 @@ func main() {
 		}
 	}
 
-	configPath := flag.String("config", config.DefaultConfigPath(), "Path to config file")
+	// Config path precedence: --config flag > MNEMOIR_CONFIG env > ~/.mnemoir.
+	// The env var avoids arg word-splitting when the home path contains spaces
+	// (e.g. "C:\Users\First Last" on Windows MCP spawns).
+	defaultConfigPath := config.DefaultConfigPath()
+	if envPath := os.Getenv(config.EnvConfigPath); envPath != "" {
+		defaultConfigPath = envPath
+	}
+	configPath := flag.String("config", defaultConfigPath, "Path to config file")
 	showVersion := flag.Bool("version", false, "Print version and exit")
 	flag.Parse()
 

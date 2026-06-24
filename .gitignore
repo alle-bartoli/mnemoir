@@ -3,6 +3,12 @@ bin/
 
 # Redis persistence (local bind mount)
 data/
+
+# Stray local config dir (created if HOME resolves wrong on Windows)
+.mnemoir/
+
+# HuggingFace model cache (downloaded at runtime, cwd-relative)
+.cache/
 *.exe
 *.dll
 *.so

@@ -223,6 +223,32 @@ $gobin = go env GOPATH | ForEach-Object { Join-Path $_ "bin" }
 
 Then restart your terminal for the change to take effect.
 
+**Windows: `jq is required` during `task setup`, or config created at `/.mnemoir`**
+
+A bare `bash` on Windows often resolves to **WSL bash**, not Git Bash. WSL bash
+cannot see Windows `.exe` tools (so `command -v jq` fails even when `jq` is
+installed) and reports an empty `$HOME` (so config lands at the drive root
+`/.mnemoir`). The `Taskfile.yml` forces Git Bash by default. If Git is installed
+somewhere other than `C:\Program Files\Git`, point `MNEMOIR_BASH` at it:
+
+```powershell
+$env:MNEMOIR_BASH = "C:/path/to/Git/bin/bash.exe"
+task setup
+```
+
+After installing `jq` via `choco`/`winget`/`scoop`, reopen the terminal so the
+`PATH` change is picked up.
+
+**Windows: MCP fails to connect (`-32000`) on first use**
+
+The `local` embedding provider downloads an ONNX model on first run. The model
+is fetched directly into `~/.mnemoir/models` (no symlinks required), then cached
+so subsequent starts load in ~2s. The first download is ~90 MB, so the very
+first connection may take a moment; reconnect once it completes. If you see
+symlink/privilege errors in `~/.mnemoir/mnemoir.log`, enabling Windows Developer
+Mode (Settings > Privacy & security > For developers) lets the HuggingFace hub
+cache use symlinks, but the direct download path works without it.
+
 ## Logs
 
 Mnemoir writes JSON logs to `~/.mnemoir/mnemoir.log` (`INFO` level). Falls back to stderr if the file cannot be opened.
