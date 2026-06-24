@@ -220,6 +220,18 @@ $gobin = go env GOPATH | ForEach-Object { Join-Path $_ "bin" }
 
 Then restart your terminal for the change to take effect.
 
+## Logs
+
+Mnemoir writes JSON logs to `~/.mnemoir/mnemoir.log` (`INFO` level). Falls back to stderr if the file cannot be opened.
+
+```bash
+# macOS / Linux
+tail -f ~/.mnemoir/mnemoir.log | jq .
+
+# Windows (PowerShell)
+Get-Content "$env:USERPROFILE\.mnemoir\mnemoir.log" -Wait
+```
+
 ## Configuration
 
 Edit `~/.mnemoir/config.toml`. Key settings:
