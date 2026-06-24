@@ -12,9 +12,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **MCP registration idempotency**: `task mcp` and `task mcp:global` now remove
   existing entries before re-adding, preventing `already exists` errors on
   repeated `task setup` runs
-- **Windows script execution**: added `set: [pipefail]` and `shopt: [globstar]`
-  to `Taskfile.yml` to force bash interpreter on all platforms, fixing
-  `fork/exec *.sh: not a valid Win32 application` errors on Windows
+- **Windows script execution**: prefix all `scripts/*.sh` invocations with
+  `bash` in `Taskfile.yml`, fixing `fork/exec *.sh: not a valid Win32
+  application` errors on Windows (Task defaults to `cmd.exe` on Windows and
+  cannot execute `.sh` files directly)
 - **Windows prerequisites**: added Git as a required dependency (provides bash
   on Windows); added `Git.Git` / `git` to all Windows install commands
 - **Windows installation docs**: added `Get-Command` as Windows alternative to

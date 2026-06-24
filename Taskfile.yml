@@ -2,10 +2,6 @@
 
 version: "3"
 
-# Force bash interpreter on all platforms (requires Git Bash on Windows)
-set: [pipefail]
-shopt: [globstar]
-
 dotenv: [".env"]
 
 vars:
@@ -82,15 +78,15 @@ tasks:
       - echo "Removing claude MCP registration..."
       - claude mcp remove {{.BINARY}} 2>/dev/null || true
       - echo "Removing claude SessionEnd hook..."
-      - ./scripts/uninstall-hook.sh 2>/dev/null || true
+      - bash ./scripts/uninstall-hook.sh 2>/dev/null || true
       - echo "Removing agent specs from ~/.claude/..."
-      - ./scripts/uninstall-specs.sh 2>/dev/null || true
+      - bash ./scripts/uninstall-specs.sh 2>/dev/null || true
       - echo "Removing Codex CLI MCP registration..."
-      - ./scripts/uninstall-mcp-codex.sh 2>/dev/null || true
+      - bash ./scripts/uninstall-mcp-codex.sh 2>/dev/null || true
       - echo "Removing Codex CLI Stop hook..."
-      - ./scripts/uninstall-hook-codex.sh 2>/dev/null || true
+      - bash ./scripts/uninstall-hook-codex.sh 2>/dev/null || true
       - echo "Removing agent specs from ~/.codex/..."
-      - ./scripts/uninstall-specs-codex.sh 2>/dev/null || true
+      - bash ./scripts/uninstall-specs-codex.sh 2>/dev/null || true
       - echo "Removing config directory {{.CONFIG_DIR}}..."
       - rm -rf {{.CONFIG_DIR}}
       - echo "Removing build artifacts..."
@@ -172,12 +168,12 @@ tasks:
   hook:
     desc: Install claude SessionEnd hook
     cmds:
-      - ./scripts/install-hook.sh {{.ROOT_DIR}}/scripts/session-end-hook.sh
+      - bash ./scripts/install-hook.sh {{.ROOT_DIR}}/scripts/session-end-hook.sh
 
   specs:
     desc: Install agent specs into ~/.claude/memory/
     cmds:
-      - ./scripts/install-specs.sh {{.ROOT_DIR}}/docs/agent-specs.md
+      - bash ./scripts/install-specs.sh {{.ROOT_DIR}}/docs/agent-specs.md
 
   # ---------------------------------------------------------------------------
   # Codex
@@ -211,17 +207,17 @@ tasks:
     desc: Register MCP server with Codex CLI
     deps: [build]
     cmds:
-      - ./scripts/install-mcp-codex.sh {{.ROOT_DIR}}/{{.BIN_DIR}}/{{.BINARY}}
+      - bash ./scripts/install-mcp-codex.sh {{.ROOT_DIR}}/{{.BIN_DIR}}/{{.BINARY}}
 
   hook:codex:
     desc: Install Codex CLI Stop hook
     cmds:
-      - ./scripts/install-hook-codex.sh {{.ROOT_DIR}}/scripts/session-end-hook.sh
+      - bash ./scripts/install-hook-codex.sh {{.ROOT_DIR}}/scripts/session-end-hook.sh
 
   specs:codex:
     desc: Install agent specs into ~/.codex/AGENTS.md
     cmds:
-      - ./scripts/install-specs-codex.sh {{.ROOT_DIR}}/docs/agent-specs.md
+      - bash ./scripts/install-specs-codex.sh {{.ROOT_DIR}}/docs/agent-specs.md
 
   # ---------------------------------------------------------------------------
   # Backup / Restore
@@ -229,7 +225,7 @@ tasks:
   backup:
     desc: "Hot backup Redis data dir via BGSAVE"
     cmds:
-      - './scripts/backup-native.sh "{{.OUTPUT | default (printf "%s/backups/%s" .CONFIG_DIR (now | date "20060102"))}}"'
+      - 'bash ./scripts/backup-native.sh "{{.OUTPUT | default (printf "%s/backups/%s" .CONFIG_DIR (now | date "20060102"))}}"'
 
   restore:
     desc: Cold restore Redis data dir (INPUT=path/to/backup-dir)
@@ -237,7 +233,7 @@ tasks:
       - sh: '[ -n "{{.INPUT}}" ]'
         msg: "Usage: task restore INPUT=path/to/backup-dir"
     cmds:
-      - ./scripts/restore-native.sh {{.INPUT}}
+      - bash ./scripts/restore-native.sh {{.INPUT}}
 
   backup:json:
     desc: "Dump all memories to JSON"
