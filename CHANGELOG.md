@@ -9,6 +9,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Windows script execution**: added `set: [pipefail]` and `shopt: [globstar]`
+  to `Taskfile.yml` to force bash interpreter on all platforms, fixing
+  `fork/exec *.sh: not a valid Win32 application` errors on Windows
+- **Windows prerequisites**: added Git as a required dependency (provides bash
+  on Windows); added `Git.Git` / `git` to all Windows install commands
 - **Windows installation docs**: added `Get-Command` as Windows alternative to
   `which`, PowerShell instructions for adding Go bin to `PATH`, and
   `$env:USERPROFILE` hint for resolving the home directory

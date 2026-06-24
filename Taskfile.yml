@@ -2,6 +2,10 @@
 
 version: "3"
 
+# Force bash interpreter on all platforms (requires Git Bash on Windows)
+set: [pipefail]
+shopt: [globstar]
+
 dotenv: [".env"]
 
 vars:

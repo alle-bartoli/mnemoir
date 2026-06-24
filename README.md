@@ -27,10 +27,11 @@ Fully offline-capable, no API keys required.
 
 | Dependency                                    | Version         | Purpose                     |
 | --------------------------------------------- | --------------- | --------------------------- |
-| [Go](https://go.dev/dl/)                      | 1.25+           | Build the binary            |
-| [Docker](https://docs.docker.com/get-docker/) | with Compose v2 | Run Redis Stack             |
-| [Task](https://taskfile.dev/installation/)    | 3.x             | Task runner (replaces Make) |
-| [jq](https://jqlang.github.io/jq/download/)   | any             | Used by install scripts     |
+| [Go](https://go.dev/dl/)                       | 1.25+           | Build the binary                    |
+| [Docker](https://docs.docker.com/get-docker/)  | with Compose v2 | Run Redis Stack                     |
+| [Task](https://taskfile.dev/installation/)     | 3.x             | Task runner (replaces Make)         |
+| [jq](https://jqlang.github.io/jq/download/)   | any             | Used by install scripts             |
+| [Git](https://git-scm.com/downloads)           | any             | Clone repo; provides bash on Windows |
 
 **macOS / Linux (Homebrew)**
 
@@ -55,18 +56,20 @@ sh -c "$(curl --location https://taskfile.dev/install.sh)" -- -d -b /usr/local/b
 
 ```powershell
 # winget
-winget install GoLang.Go Docker.DockerDesktop Task.Task stedolan.jq
+winget install GoLang.Go Git.Git Docker.DockerDesktop Task.Task stedolan.jq
 
 # or Chocolatey
-choco install golang docker-desktop task jq
+choco install golang git docker-desktop task jq
 
 # or Scoop
-scoop install go docker task jq
+scoop install go git docker task jq
 
 # Start Docker Desktop, then enable WSL 2 backend if prompted
 ```
 
 > Windows requires Docker Desktop with WSL 2 backend for Redis Stack.
+> Git for Windows is required because setup scripts and Task commands use bash.
+> After installing Git, verify `bash` is on your PATH: `where.exe bash`
 
 ### Supported platforms
 
