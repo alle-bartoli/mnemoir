@@ -12,6 +12,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **MCP registration idempotency**: `task mcp` and `task mcp:global` now remove
   existing entries before re-adding, preventing `already exists` errors on
   repeated `task setup` runs
+- **Windows CRLF line endings**: added `.gitattributes` to force LF for `*.sh`,
+  `*.toml`, and `*.yml` files, preventing `$'\r': command not found` errors
+  when Git on Windows converts line endings via `core.autocrlf`
 - **Windows script execution**: prefix all `scripts/*.sh` invocations with
   `bash` in `Taskfile.yml`, fixing `fork/exec *.sh: not a valid Win32
   application` errors on Windows (Task defaults to `cmd.exe` on Windows and
