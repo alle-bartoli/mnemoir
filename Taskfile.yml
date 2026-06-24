@@ -156,6 +156,7 @@ tasks:
       - sh: '[ -n "$MNEMOIR_REDIS_PASSWORD" ]'
         msg: "MNEMOIR_REDIS_PASSWORD is not set. Set it in .env or export it."
     cmds:
+      - claude mcp remove {{.BINARY}} -s local 2>/dev/null || true
       - 'claude mcp add {{.BINARY}} -s local -t stdio -e MNEMOIR_REDIS_PASSWORD="$MNEMOIR_REDIS_PASSWORD" -- {{.ROOT_DIR}}/{{.BIN_DIR}}/{{.BINARY}} --config {{.CONFIG_DIR}}/config.toml'
 
   mcp:global:
@@ -165,6 +166,7 @@ tasks:
       - sh: '[ -n "$MNEMOIR_REDIS_PASSWORD" ]'
         msg: "MNEMOIR_REDIS_PASSWORD is not set. Set it in .env or export it."
     cmds:
+      - claude mcp remove {{.BINARY}} -s user 2>/dev/null || true
       - 'claude mcp add {{.BINARY}} -s user -t stdio -e MNEMOIR_REDIS_PASSWORD="$MNEMOIR_REDIS_PASSWORD" -- {{.ROOT_DIR}}/{{.BIN_DIR}}/{{.BINARY}} --config {{.CONFIG_DIR}}/config.toml'
 
   hook:

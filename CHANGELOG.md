@@ -9,6 +9,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **MCP registration idempotency**: `task mcp` and `task mcp:global` now remove
+  existing entries before re-adding, preventing `already exists` errors on
+  repeated `task setup` runs
 - **Windows script execution**: added `set: [pipefail]` and `shopt: [globstar]`
   to `Taskfile.yml` to force bash interpreter on all platforms, fixing
   `fork/exec *.sh: not a valid Win32 application` errors on Windows
