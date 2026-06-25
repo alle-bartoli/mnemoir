@@ -5,6 +5,15 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased] - 2026-06-25
+
+### Fixed
+
+- **Taskfile `HOME_DIR` template crash on macOS**: `default` eagerly evaluates
+  both branches; piping nil `.USERPROFILE` into `replace` raised
+  `invalid value; expected string`. Replaced `default` with `if/else` guard so
+  `replace` only runs when `.HOME` is absent (Windows)
+
 ## [Unreleased] - 2026-06-24 (Marco Bartoli)
 
 ### Fixed

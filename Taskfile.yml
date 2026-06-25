@@ -13,7 +13,7 @@ vars:
   CMD_DIR: ./cmd/mnemoir
   # On Windows PowerShell $HOME is empty (it sets USERPROFILE); fall back to it
   # and normalize backslashes so the path works in bash, gosh, and the binary.
-  HOME_DIR: '{{.HOME | default (.USERPROFILE | replace "\\" "/")}}'
+  HOME_DIR: '{{if .HOME}}{{.HOME}}{{else}}{{.USERPROFILE | replace "\\" "/"}}{{end}}'
   CONFIG_DIR: "{{.HOME_DIR}}/.mnemoir"
   REDIS_UI_URL: "http://localhost:8001"
   # Force Git Bash on Windows: a bare `bash` resolves to WSL bash, which cannot
