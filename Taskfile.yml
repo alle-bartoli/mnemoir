@@ -84,8 +84,10 @@ tasks:
     cmds:
       - echo "Removing binary from GOPATH..."
       - rm -f $(go env GOPATH)/bin/{{.BINARY}}{{.BIN_EXT}}
-      - echo "Removing claude MCP registration..."
-      - claude mcp remove {{.BINARY}} 2>/dev/null || true
+      - echo "Removing claude MCP registration (all scopes)..."
+      - claude mcp remove {{.BINARY}} -s user 2>/dev/null || true
+      - claude mcp remove {{.BINARY}} -s local 2>/dev/null || true
+      - claude mcp remove {{.BINARY}} -s project 2>/dev/null || true
       - echo "Removing claude SessionEnd hook..."
       - '"{{.BASH}}" ./scripts/uninstall-hook.sh 2>/dev/null || true'
       - echo "Removing agent specs from ~/.claude/..."
@@ -154,8 +156,12 @@ tasks:
       - echo ""
       - echo "Setup complete. Edit {{.CONFIG_DIR}}/config.toml to customize."
 
-  mcp:
-    desc: Register MCP server with claude (project-local)
+  mcp:local:
+    desc: |
+      Register MCP server in claude project-local scope (cwd-bound).
+      WARNING: local scope takes precedence over user scope in Claude Code.
+      Do not combine with mcp:global on the same host or the local entry
+      will shadow the global one silently. Prefer mcp:global.
     deps: [build]
     preconditions:
       - sh: '[ -n "$MNEMOIR_REDIS_PASSWORD" ]'
@@ -165,13 +171,15 @@ tasks:
       - 'claude mcp add {{.BINARY}} -s local -t stdio -e MNEMOIR_REDIS_PASSWORD="$MNEMOIR_REDIS_PASSWORD" -e MNEMOIR_CONFIG="{{.CONFIG_DIR}}/config.toml" -- {{.ROOT_DIR}}/{{.BIN_DIR}}/{{.BINARY}}{{.BIN_EXT}}'
 
   mcp:global:
-    desc: Register MCP server globally (all claude projects)
+    desc: Register MCP server globally (all claude projects). Also purges any local/project scope entry so it cannot shadow the global one.
     deps: [build]
     preconditions:
       - sh: '[ -n "$MNEMOIR_REDIS_PASSWORD" ]'
         msg: "MNEMOIR_REDIS_PASSWORD is not set. Set it in .env or export it."
     cmds:
       - claude mcp remove {{.BINARY}} -s user 2>/dev/null || true
+      - claude mcp remove {{.BINARY}} -s local 2>/dev/null || true
+      - claude mcp remove {{.BINARY}} -s project 2>/dev/null || true
       - 'claude mcp add {{.BINARY}} -s user -t stdio -e MNEMOIR_REDIS_PASSWORD="$MNEMOIR_REDIS_PASSWORD" -e MNEMOIR_CONFIG="{{.CONFIG_DIR}}/config.toml" -- {{.ROOT_DIR}}/{{.BIN_DIR}}/{{.BINARY}}{{.BIN_EXT}}'
 
   hook:

@@ -5,6 +5,29 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased] - 2026-07-07 (Alessandro Bartoli)
+
+### Fixed
+
+- **MCP silently unreachable in Claude Code (`-32000`)**: `task mcp` registered
+  the server in Claude's `local` (project) scope, which takes precedence over
+  `user` scope. Any host that ran both `task mcp` and `task mcp:global` ended
+  up with the global entry shadowed by a stale local one, and Claude Code
+  kept spawning whichever binary the local entry pointed to. `mcp:global` now
+  purges `local` and `project` scope entries before re-adding to `user`, so
+  the global registration always wins
+- **`task uninstall` leaving orphan MCP entries**: the remove command ran
+  without `-s`, so only the default (local) scope was cleared. `user` and
+  `project` scope registrations survived and continued to appear in
+  `claude mcp list`. Uninstall now removes from all three scopes explicitly
+
+### Changed
+
+- **`task mcp` renamed to `task mcp:local`**: the previous name did not signal
+  that the registration was cwd-bound and would shadow `mcp:global`.
+  Description now warns against combining both on the same host and recommends
+  `mcp:global` as the default
+
 ## [Unreleased] - 2026-06-25
 
 ### Fixed
