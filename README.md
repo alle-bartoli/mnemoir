@@ -90,6 +90,13 @@ scoop install go git docker task jq
 | Pi                           | manual             | manual | none         | manual |
 | Cursor, Windsurf, Cline, Zed | manual             | manual | none         | manual |
 
+> **Manual clients need a config file.** `task setup` / `task setup:codex` only
+> cover Claude Code and Codex, so a manual client (Pi, Cursor, etc.) won't have
+> `~/.mnemoir/config.toml` created for it. The registered MCP server points at that
+> file and the binary exits with `Failed to load config` if it's missing — so create
+> it before connecting (see the manual-client section below) or the MCP tool will
+> fail to start with `Failed to load config`.
+
 Clients without a hook require the agent to call `end_session` manually before the conversation ends.
 
 ## Installation
@@ -169,7 +176,22 @@ The agent must call `end_session` manually before the conversation ends, or memo
 
 #### Pi, Cursor, Windsurf, Cline, Zed, Continue.dev - manual setup, no hook
 
-Any MCP-compatible client can use mnemoir. Add the same `mcpServers` JSON block above to your client's config file.
+Any MCP-compatible client can use mnemoir. First **create the config file** (manual
+clients don't get one automatically):
+
+```bash
+mkdir -p ~/.mnemoir && chmod 700 ~/.mnemoir
+cp config/default.toml ~/.mnemoir/config.toml
+chmod 600 ~/.mnemoir/config.toml
+```
+
+Then add the same `mcpServers` JSON block above to your client's config file. The
+`command` and `--config` must point at `~/.mnemoir/config.toml` and the binary on
+your PATH. Verify the binary starts before configuring the client:
+
+```bash
+$(go env GOPATH)/bin/mnemoir --config ~/.mnemoir/config.toml --version
+```
 
 These clients lack a session-end hook.  
 The agent must call `end_session` manually before the conversation ends.
@@ -248,6 +270,11 @@ first connection may take a moment; reconnect once it completes. If you see
 symlink/privilege errors in `~/.mnemoir/mnemoir.log`, enabling Windows Developer
 Mode (Settings > Privacy & security > For developers) lets the HuggingFace hub
 cache use symlinks, but the direct download path works without it.
+
+**Linux: Docker CLI permission denied**
+
+This is a minor issue if Redis is up.
+Please see [Docker rootless mode](https://docs.docker.com/engine/security/rootless/) in order to use Docker without sudo and keep the runtime secure.
 
 ## Logs
 
