@@ -45,8 +45,11 @@ open -a Docker
 **Linux (apt)**
 
 ```bash
-sudo apt update && sudo apt install -y golang docker.io docker-compose-v2 jq
-sudo systemctl start docker
+sudo apt update && sudo apt install -y golang docker.io docker-compose-v2 jq curl
+sudo systemctl enable --now docker
+
+# Verify that the distribution provides the required Go version (1.25+)
+go version
 
 # Install Task
 sh -c "$(curl --location https://taskfile.dev/install.sh)" -- -d -b /usr/local/bin
@@ -130,7 +133,7 @@ Get-Command mnemoir   # should print e.g. C:\Users\you\go\bin\mnemoir.exe
 task setup
 ```
 
-Starts Redis, copies config to `~/.mnemoir/config.toml`, prewarms the configured local embedding model, registers the MCP server globally, installs the `SessionEnd` hook, and installs agent specs.
+Starts Redis, copies config to `~/.mnemoir/config.toml`, prewarms the configured local embedding model, registers the MCP server globally, installs the `SessionEnd` hook, and installs agent specs. If Claude Code is not installed, the Claude-specific steps are skipped with a warning instead of failing.
 The `SessionEnd` hook calls `/end-session` automatically when a conversation ends, so memories are never lost even if you forget to call `end_session`.
 
 #### OpenAI Codex CLI - full support
@@ -167,13 +170,57 @@ Restart Claude Desktop after saving.
 Claude Desktop has no session-end hook.  
 The agent must call `end_session` manually before the conversation ends, or memories from that session will be lost.
 
-#### Pi, Cursor, Windsurf, Cline, Zed, Continue.dev - manual setup, no hook
+#### Pi - manual setup
 
-Any MCP-compatible client can use mnemoir. Add the same `mcpServers` JSON block above to your client's config file.
+Pi requires an MCP adapter and manual configuration. On Linux/macOS:
 
-These clients lack a session-end hook.  
-The agent must call `end_session` manually before the conversation ends.
-Copy the agent specs from [docs/agent-specs.md](docs/agent-specs.md) (content after the `---` separator) into your agent's system prompt so it knows the lifecycle.
+```bash
+# From the repository root
+printf 'MNEMOIR_REDIS_PASSWORD=choose-a-strong-password\n' > .env
+export MNEMOIR_REDIS_PASSWORD='choose-a-strong-password'
+
+task docker:up
+task install
+mkdir -p ~/.mnemoir
+cp config/default.toml ~/.mnemoir/config.toml
+task prewarm
+
+# Install the Pi MCP adapter
+pi install npm:pi-mcp-adapter
+```
+
+Restart Pi, then add this server to `~/.pi/agent/mcp.json`. Merge the `mnemoir`
+entry into an existing `mcpServers` object instead of overwriting the file:
+
+```json
+{
+  "mcpServers": {
+    "mnemoir": {
+      "command": "/absolute/path/to/mnemoir",
+      "args": ["--config", "/home/user/.mnemoir/config.toml"],
+      "env": {
+        "MNEMOIR_REDIS_PASSWORD": "${MNEMOIR_REDIS_PASSWORD}"
+      },
+      "lifecycle": "lazy",
+      "directTools": true
+    }
+  }
+}
+```
+
+Use `which mnemoir` and `echo "$HOME"` to replace the example paths. Keep
+`MNEMOIR_REDIS_PASSWORD` exported in the shell that starts Pi. Verify with
+`/mcp` and `/mcp reconnect mnemoir`.
+
+Pi has no session-end hook. Copy the content after the `---` separator in
+[docs/agent-specs.md](docs/agent-specs.md) into Pi's system prompt, and call
+`end_session` manually before the conversation ends.
+
+#### Cursor, Windsurf, Cline, Zed, Continue.dev - manual setup, no hook
+
+Any MCP-compatible client can use mnemoir. Add the same `mcpServers` JSON block
+above to the client's config file. These clients lack a session-end hook, so the
+agent must call `end_session` manually before the conversation ends.
 
 ### Optional API keys
 
@@ -405,7 +452,7 @@ task redis:ui        # Open RedisInsight (http://localhost:8001)
 
 # claude
 task setup           # Full install (also prewarms local ONNX model)
-task mcp             # Register MCP (project-local)
+task mcp:local       # Register MCP (project-local)
 task mcp:global      # Register MCP (all projects)
 task hook            # Install SessionEnd hook
 task specs           # Install agent specs into ~/.claude/memory/

@@ -151,9 +151,15 @@ tasks:
           echo "WARNING: MNEMOIR_REDIS_PASSWORD is not set. Set it before starting Redis."
         fi
       - task: prewarm
-      - task: mcp:global
-      - task: hook
-      - task: specs
+      - |
+        if command -v claude >/dev/null 2>&1; then
+          task mcp:global
+          task hook
+          task specs
+        else
+          echo "Claude CLI not found; skipping Claude MCP, hook, and specs setup."
+          echo "For Pi, use the manual setup documented in README.md."
+        fi
       - echo ""
       - echo "Setup complete. Edit {{.CONFIG_DIR}}/config.toml to customize."
 

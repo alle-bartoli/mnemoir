@@ -7,7 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased] - 2026-08-26 (Alessandro Bartoli)
 
-Prevents first-run MCP startup timeouts by preparing local embeddings during setup.
+Improves first-run MCP setup and keeps client-specific installation optional.
 
 ### Added
 
@@ -20,6 +20,12 @@ Prevents first-run MCP startup timeouts by preparing local embeddings during set
 - **Complete setup flow**: `task setup` and `task setup:codex` now prewarm the local
   embedding model before registering MCP, avoiding a timeout during the first
   connection. Manual installations can run `task prewarm` before connecting
+
+### Fixed
+
+- **Setup without Claude Code**: `task setup` now skips Claude-specific MCP,
+  hook, and specs registration when the `claude` command is unavailable, so
+  core installation can complete for clients such as Pi
 
 ## [Unreleased] - 2026-07-07 (Alessandro Bartoli)
 
