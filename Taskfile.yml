@@ -150,11 +150,21 @@ tasks:
         if [ -z "$MNEMOIR_REDIS_PASSWORD" ]; then
           echo "WARNING: MNEMOIR_REDIS_PASSWORD is not set. Set it before starting Redis."
         fi
+      - task: prewarm
       - task: mcp:global
       - task: hook
       - task: specs
       - echo ""
       - echo "Setup complete. Edit {{.CONFIG_DIR}}/config.toml to customize."
+
+  prewarm:
+    desc: Download and initialize the configured local embedding model
+    deps: [build]
+    preconditions:
+      - sh: '[ -f "{{.CONFIG_DIR}}/config.toml" ]'
+        msg: "Config not found at {{.CONFIG_DIR}}/config.toml. Run setup first or create it manually."
+    cmds:
+      - '"{{.ROOT_DIR}}/{{.BIN_DIR}}/{{.BINARY}}{{.BIN_EXT}}" prewarm --config "{{.CONFIG_DIR}}/config.toml"'
 
   mcp:local:
     desc: |
@@ -214,6 +224,7 @@ tasks:
         if [ -z "$MNEMOIR_REDIS_PASSWORD" ]; then
           echo "WARNING: MNEMOIR_REDIS_PASSWORD is not set. Set it before starting Redis."
         fi
+      - task: prewarm
       - task: mcp:codex
       - task: hook:codex
       - task: specs:codex

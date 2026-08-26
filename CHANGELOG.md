@@ -5,6 +5,22 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased] - 2026-08-26 (Alessandro Bartoli)
+
+Prevents first-run MCP startup timeouts by preparing local embeddings during setup.
+
+### Added
+
+- **Embedding prewarm command**: `task prewarm` or `mnemoir prewarm` downloads and
+  initializes the configured local ONNX model before MCP use. Non-local providers
+  skip the step without requiring API keys or running services
+
+### Changed
+
+- **Complete setup flow**: `task setup` and `task setup:codex` now prewarm the local
+  embedding model before registering MCP, avoiding a timeout during the first
+  connection. Manual installations can run `task prewarm` before connecting
+
 ## [Unreleased] - 2026-07-07 (Alessandro Bartoli)
 
 ### Fixed

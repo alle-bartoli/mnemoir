@@ -130,7 +130,7 @@ Get-Command mnemoir   # should print e.g. C:\Users\you\go\bin\mnemoir.exe
 task setup
 ```
 
-Starts Redis, copies config to `~/.mnemoir/config.toml`, registers the MCP server globally, installs the `SessionEnd` hook, and installs agent specs.
+Starts Redis, copies config to `~/.mnemoir/config.toml`, prewarms the configured local embedding model, registers the MCP server globally, installs the `SessionEnd` hook, and installs agent specs.
 The `SessionEnd` hook calls `/end-session` automatically when a conversation ends, so memories are never lost even if you forget to call `end_session`.
 
 #### OpenAI Codex CLI - full support
@@ -239,15 +239,20 @@ task setup
 After installing `jq` via `choco`/`winget`/`scoop`, reopen the terminal so the
 `PATH` change is picked up.
 
-**Windows: MCP fails to connect (`-32000`) on first use**
+**First-run local model download**
 
-The `local` embedding provider downloads an ONNX model on first run. The model
-is fetched directly into `~/.mnemoir/models` (no symlinks required), then cached
-so subsequent starts load in ~2s. The first download is ~90 MB, so the very
-first connection may take a moment; reconnect once it completes. If you see
-symlink/privilege errors in `~/.mnemoir/mnemoir.log`, enabling Windows Developer
-Mode (Settings > Privacy & security > For developers) lets the HuggingFace hub
-cache use symlinks, but the direct download path works without it.
+The default `local` embedding provider downloads an ONNX model of approximately
+90 MB. `task setup` and `task setup:codex` prewarm it before MCP registration;
+the download may take a few minutes depending on the connection. To manually
+prewarm or retry after an interrupted download, run:
+
+```bash
+task prewarm
+```
+
+This reads `~/.mnemoir/config.toml` and skips the step when a non-local embedding
+provider is configured. Manual MCP setups should run this command first to avoid
+a startup timeout on the first connection.
 
 ## Logs
 
@@ -399,14 +404,14 @@ task docker:down     # Stop Redis Stack
 task redis:ui        # Open RedisInsight (http://localhost:8001)
 
 # claude
-task setup           # Full install (docker + build + config + MCP + hook + specs)
+task setup           # Full install (also prewarms local ONNX model)
 task mcp             # Register MCP (project-local)
 task mcp:global      # Register MCP (all projects)
 task hook            # Install SessionEnd hook
 task specs           # Install agent specs into ~/.claude/memory/
 
 # OpenAI Codex CLI
-task setup:codex     # Full install for Codex CLI
+task setup:codex     # Full install (also prewarms local ONNX model)
 task mcp:codex       # Register MCP with Codex CLI
 task hook:codex      # Install Stop hook
 task specs:codex     # Install agent specs into ~/.codex/AGENTS.md
@@ -418,6 +423,7 @@ task restore:json    # Restore memories from JSON (INPUT=path/to/file.json)
 task clean           # Remove build artifacts
 task clean:data      # Stop Redis + wipe data/
 task install         # Install to $GOPATH/bin
+task prewarm         # Download/initialize configured local embedding model
 task uninstall       # Remove everything (binary, MCP, config, hook, specs)
 ```
 
