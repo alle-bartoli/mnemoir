@@ -5,6 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased] - 2026-08-29 (Alessandro Bartoli)
+
+Improves MCP startup reliability for Pi and other clean-environment clients.
+
+### Added
+
+- **Portable MCP wrapper**: `task mcp:wrapper` installs `~/.local/bin/mnemoir-mcp`,
+  a Linux/macOS POSIX launcher that loads `~/.mnemoir/.env` or the repository
+  `.env` before executing mnemoir, preventing Redis auth loss when clients start
+  from a clean environment
+
 ## [Unreleased] - 2026-08-26 (Alessandro Bartoli)
 
 Improves first-run MCP setup and keeps client-specific installation optional.

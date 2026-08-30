@@ -185,6 +185,10 @@ mkdir -p ~/.mnemoir
 cp config/default.toml ~/.mnemoir/config.toml
 task prewarm
 
+# Install a portable Linux/macOS wrapper that loads mnemoir env before startup.
+# This avoids Redis NOAUTH failures when Pi is launched from a clean environment.
+task mcp:wrapper
+
 # Install the Pi MCP adapter
 pi install npm:pi-mcp-adapter
 ```
@@ -196,11 +200,8 @@ entry into an existing `mcpServers` object instead of overwriting the file:
 {
   "mcpServers": {
     "mnemoir": {
-      "command": "/absolute/path/to/mnemoir",
-      "args": ["--config", "/home/user/.mnemoir/config.toml"],
-      "env": {
-        "MNEMOIR_REDIS_PASSWORD": "${MNEMOIR_REDIS_PASSWORD}"
-      },
+      "command": "/home/user/.local/bin/mnemoir-mcp",
+      "args": [],
       "lifecycle": "lazy",
       "directTools": true
     }
@@ -208,9 +209,11 @@ entry into an existing `mcpServers` object instead of overwriting the file:
 }
 ```
 
-Use `which mnemoir` and `echo "$HOME"` to replace the example paths. Keep
-`MNEMOIR_REDIS_PASSWORD` exported in the shell that starts Pi. Verify with
-`/mcp` and `/mcp reconnect mnemoir`.
+Use `echo "$HOME"` to replace the example path. The wrapper is a POSIX `sh`
+script generated with absolute paths, so it works on Linux and macOS. On start
+it loads `~/.mnemoir/.env` first, then falls back to the repository `.env`, and
+exits with a clear error if `MNEMOIR_REDIS_PASSWORD` is still missing. Verify
+with `/mcp` and `/mcp reconnect mnemoir`.
 
 Pi has no session-end hook. Copy the content after the `---` separator in
 [docs/agent-specs.md](docs/agent-specs.md) into Pi's system prompt, and call

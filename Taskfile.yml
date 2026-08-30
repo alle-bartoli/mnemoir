@@ -158,7 +158,7 @@ tasks:
           task specs
         else
           echo "Claude CLI not found; skipping Claude MCP, hook, and specs setup."
-          echo "For Pi, use the manual setup documented in README.md."
+          echo "For Pi, run 'task mcp:wrapper' and use the wrapper path documented in README.md."
         fi
       - echo ""
       - echo "Setup complete. Edit {{.CONFIG_DIR}}/config.toml to customize."
@@ -171,6 +171,12 @@ tasks:
         msg: "Config not found at {{.CONFIG_DIR}}/config.toml. Run setup first or create it manually."
     cmds:
       - '"{{.ROOT_DIR}}/{{.BIN_DIR}}/{{.BINARY}}{{.BIN_EXT}}" prewarm --config "{{.CONFIG_DIR}}/config.toml"'
+
+  mcp:wrapper:
+    desc: Install a Linux/macOS MCP launcher that loads mnemoir env before exec
+    deps: [build]
+    cmds:
+      - '"{{.BASH}}" ./scripts/install-mcp-wrapper.sh'
 
   mcp:local:
     desc: |
