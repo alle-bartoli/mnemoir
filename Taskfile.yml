@@ -247,7 +247,7 @@ tasks:
     desc: Register MCP server with Codex CLI
     deps: [build]
     cmds:
-      - '"{{.BASH}}" ./scripts/install-mcp-codex.sh {{.ROOT_DIR}}/{{.BIN_DIR}}/{{.BINARY}}'
+      - '"{{.BASH}}" ./scripts/install-mcp-codex.sh "{{.ROOT_DIR}}/{{.BIN_DIR}}/{{.BINARY}}{{.BIN_EXT}}"'
 
   hook:codex:
     desc: Install Codex CLI Stop hook

@@ -5,6 +5,15 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased] - 2026-09-02 (Alessandro Bartoli)
+
+### Fixed
+
+- **Portable MCP wrapper safety**: environment files are parsed only for
+  `MNEMOIR_REDIS_PASSWORD` instead of being executed as shell scripts, and
+  generated paths are safely quoted
+- **Windows Codex setup**: Codex registration now uses the `.exe` binary path
+
 ## [Unreleased] - 2026-08-29 (Alessandro Bartoli)
 
 Improves MCP startup reliability for Pi and other clean-environment clients.
