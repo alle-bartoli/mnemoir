@@ -43,7 +43,7 @@ Use `tags` for discoverability: `"redis,config"`, `"auth,security,bug"`, `"api,d
 
 ### When to recall memories
 
-Call `recall` **before starting any task**. This is not optional. Always check for prior context before doing work.
+As a best practice, call `recall` **before starting any task** so previous context is available before doing work.
 
 Recall before:
 
@@ -117,9 +117,9 @@ A good `observations` value includes:
 - Anything surprising or non-obvious
 
 ```
-end_session(observations: "Renamed Makefile targets mcp-register -> mcp,
-  mcp-register-global -> mcp-global for shorter CLI. Updated README (3 spots)
-  and CHANGELOG. User prefers short target names over verbose ones.")
+end_session(observations: "Renamed the local MCP task to mcp:local and the global task to
+  mcp:global to make scope explicit. Updated README and CHANGELOG. User prefers
+  explicit task scopes over ambiguous registrations.")
 ```
 
 **Fallback**: If the user kills the session (`ctrl+c`) before you can call `end_session`, the `SessionEnd` hook (claude) or `Stop` hook (Codex CLI) calls the `/end-session` HTTP endpoint automatically with a minimal observation. This is a safety net, not a replacement. Always call `end_session` yourself when possible, since your observations are far richer than the hook's generic message.
@@ -175,4 +175,4 @@ Mnemoir is not a start/end-only tool. Use it throughout the conversation:
    -> auto-extracts facts/concepts/narratives from observations
 ```
 
-The key rule: **recall before every task, store after every meaningful change**. Do not batch everything to `end_session`. Store important decisions and findings as they happen so they are immediately available for recall in subsequent tasks within the same session.
+Recommended pattern: **recall before each meaningful task and store after each meaningful change**. Do not batch important context only into `end_session`; store decisions and findings as they happen so they are immediately available for later work in the same session.

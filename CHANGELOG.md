@@ -5,6 +5,22 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased] - 2026-09-11 (Alessandro Bartoli)
+
+Improves public onboarding while keeping agent instructions self-contained.
+
+### Added
+
+- **Focused documentation guides**: client setup, troubleshooting, backup and restore,
+  and search scoring details are now available without overloading the main README
+
+### Changed
+
+- **README onboarding**: the landing page now focuses on requirements, quick start,
+  common commands, and clear links instead of mixing in detailed reference material
+- **Agent instructions**: outdated task examples were corrected and memory workflow
+  guidance now distinguishes recommendations from required lifecycle calls
+
 ## [Unreleased] - 2026-09-02 (Alessandro Bartoli)
 
 ### Fixed
