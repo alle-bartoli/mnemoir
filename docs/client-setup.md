@@ -21,7 +21,23 @@ This configures Codex's MCP server, `Stop` hook, and agent specs.
 
 ## Claude Desktop and generic MCP clients
 
-Run `task install`, copy `config/default.toml` to `~/.mnemoir/config.toml`, and run `task prewarm`. 
+Install the binary and create the configuration manually:
+
+```bash
+task docker:up
+task install
+mkdir -p ~/.mnemoir && chmod 700 ~/.mnemoir
+cp config/default.toml ~/.mnemoir/config.toml
+chmod 600 ~/.mnemoir/config.toml
+task prewarm
+```
+
+Verify that the binary can load the configuration before connecting the client:
+
+```bash
+$(go env GOPATH)/bin/mnemoir --config ~/.mnemoir/config.toml --version
+```
+
 Add this server block to the client's MCP configuration:
 
 ```json
@@ -36,8 +52,7 @@ Add this server block to the client's MCP configuration:
 }
 ```
 
-Use absolute paths; `~` is not expanded by every MCP client. 
-Clients without a session hook must call `end_session` manually.
+Use absolute paths; `~` is not expanded by every MCP client. Clients without a session hook must call `end_session` manually.
 
 ## Pi
 

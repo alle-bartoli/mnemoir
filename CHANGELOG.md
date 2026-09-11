@@ -11,8 +11,9 @@ Improves public onboarding while keeping agent instructions self-contained.
 
 ### Added
 
-- **Focused documentation guides**: client setup, troubleshooting, backup and restore,
-  and search scoring details are now available without overloading the main README
+- **Focused documentation guides**: manual clients now get explicit configuration
+  and Redis startup steps, while troubleshooting covers Docker rootless mode,
+  backups, and search scoring without overloading the main README
 
 ### Changed
 

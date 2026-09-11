@@ -15,8 +15,12 @@ task setup
 
 ## First local model startup is slow
 
-The default local embedding model is about 90 MB. Run `task prewarm` before connecting an MCP client. 
+The default local embedding model is about 90 MB. Run `task prewarm` before connecting an MCP client.
 The command is skipped for non-local embedding providers.
+
+## Docker permission denied on Linux
+
+If Docker requires `sudo`, configure [rootless Docker mode](https://docs.docker.com/engine/security/rootless/) so the local Redis service can run without elevated privileges.
 
 ## Claude Desktop reports permission denied on macOS
 
