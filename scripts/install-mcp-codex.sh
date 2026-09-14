@@ -6,7 +6,12 @@
 
 set -euo pipefail
 
-BINARY="${1:-$(go env GOPATH)/bin/mnemoir}"
+# go install appends .exe on Windows; match it so the default path resolves.
+BIN_EXT=""
+if [ "$(go env GOOS)" = "windows" ]; then
+  BIN_EXT=".exe"
+fi
+BINARY="${1:-$(go env GOPATH)/bin/mnemoir${BIN_EXT}}"
 CONFIG_DIR="${HOME}/.mnemoir"
 CODEX_CONFIG="${HOME}/.codex/config.toml"
 
@@ -31,10 +36,20 @@ if [ -f "$CODEX_CONFIG" ] && grep -q '^\[mcp_servers\.mnemoir\]' "$CODEX_CONFIG"
   exit 0
 fi
 
+# Pass the config path via env, not a flag: env values are immune to argument
+# word-splitting when the home path contains spaces (e.g. "First Last" on
+# Windows). Normalize MSYS paths (/c/Users/...) to native (C:/Users/...) so the
+# Windows binary can open the file.
+CONFIG_FILE="${CONFIG_DIR}/config.toml"
+if command -v cygpath &> /dev/null; then
+  CONFIG_FILE="$(cygpath -m "$CONFIG_FILE")"
+fi
+
 codex mcp add mnemoir \
   --env "MNEMOIR_REDIS_PASSWORD=${MNEMOIR_REDIS_PASSWORD}" \
-  -- "$BINARY" --config "${CONFIG_DIR}/config.toml"
+  --env "MNEMOIR_CONFIG=${CONFIG_FILE}" \
+  -- "$BINARY"
 
 echo "MCP server 'mnemoir' registered in $CODEX_CONFIG"
 echo "  Binary: $BINARY"
-echo "  Config: ${CONFIG_DIR}/config.toml"
+echo "  Config: ${CONFIG_FILE}"

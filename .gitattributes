@@ -1,0 +1,8 @@
+# Force LF line endings for shell scripts (bash cannot parse CRLF)
+*.sh text eol=lf
+
+# Force LF for other text files commonly parsed by Unix tools
+*.toml text eol=lf
+*.yml text eol=lf
+*.yaml text eol=lf
+Taskfile.yml text eol=lf

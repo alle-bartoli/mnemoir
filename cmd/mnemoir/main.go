@@ -23,6 +23,33 @@ import (
 
 var version = "0.0.0"
 
+func runPrewarm(args []string) {
+	fs := flag.NewFlagSet("prewarm", flag.ExitOnError)
+	defaultConfigPath := config.DefaultConfigPath()
+	if envPath := os.Getenv(config.EnvConfigPath); envPath != "" {
+		defaultConfigPath = envPath
+	}
+	configPath := fs.String("config", defaultConfigPath, "Path to config file")
+	fs.Parse(args)
+
+	cfg, err := config.Load(*configPath)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "failed to load config: %v\n", err)
+		os.Exit(1)
+	}
+	if cfg.Embedding.Provider != config.EmbeddingProviderLocal {
+		fmt.Printf("Local embedding prewarm skipped (provider: %s).\n", cfg.Embedding.Provider)
+		return
+	}
+
+	fmt.Printf("Preparing local embedding model...\n")
+	if err := embedding.PrewarmLocalModel(cfg.Embedding); err != nil {
+		fmt.Fprintf(os.Stderr, "failed to prewarm local embedding model: %v\n", err)
+		os.Exit(1)
+	}
+	fmt.Println("Local embedding model is ready.")
+}
+
 func main() {
 	if len(os.Args) > 1 {
 		switch os.Args[1] {
@@ -32,10 +59,20 @@ func main() {
 		case "restore":
 			runRestore(os.Args[2:])
 			return
+		case "prewarm":
+			runPrewarm(os.Args[2:])
+			return
 		}
 	}
 
-	configPath := flag.String("config", config.DefaultConfigPath(), "Path to config file")
+	// Config path precedence: --config flag > MNEMOIR_CONFIG env > ~/.mnemoir.
+	// The env var avoids arg word-splitting when the home path contains spaces
+	// (e.g. "C:\Users\First Last" on Windows MCP spawns).
+	defaultConfigPath := config.DefaultConfigPath()
+	if envPath := os.Getenv(config.EnvConfigPath); envPath != "" {
+		defaultConfigPath = envPath
+	}
+	configPath := flag.String("config", defaultConfigPath, "Path to config file")
 	showVersion := flag.Bool("version", false, "Print version and exit")
 	flag.Parse()
 

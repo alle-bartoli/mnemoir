@@ -36,3 +36,18 @@ func NewEmbedder(cfg config.EmbeddingConfig) (IEmbedder, error) {
 		return nil, fmt.Errorf("unknown embedding provider: %s", cfg.Provider)
 	}
 }
+
+// PrewarmLocalModel initializes the configured local embedder so its model is
+// downloaded before an MCP client starts. Non-local providers are intentionally
+// skipped: prewarming them could require a running service or API credentials.
+func PrewarmLocalModel(cfg config.EmbeddingConfig) error {
+	if cfg.Provider != config.EmbeddingProviderLocal {
+		return nil
+	}
+
+	emb, err := NewLocalEmbedder(cfg.Local, cfg.Dimension)
+	if err != nil {
+		return err
+	}
+	return emb.Close()
+}

@@ -5,26 +5,169 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased] - 2026-09-11 (Alessandro Bartoli)
+
+Improves public onboarding while keeping agent instructions self-contained.
+
+### Added
+
+- **Focused documentation guides**: manual clients now get explicit configuration
+  and Redis startup steps, while troubleshooting covers Docker rootless mode,
+  backups, and search scoring without overloading the main README
+
+### Changed
+
+- **README onboarding**: the landing page now focuses on requirements, quick start,
+  common commands, and clear links instead of mixing in detailed reference material
+- **Agent instructions**: outdated task examples were corrected and memory workflow
+  guidance now distinguishes recommendations from required lifecycle calls
+
+## [Unreleased] - 2026-09-02 (Alessandro Bartoli)
+
+### Fixed
+
+- **Portable MCP wrapper safety**: environment files are parsed only for
+  `MNEMOIR_REDIS_PASSWORD` instead of being executed as shell scripts, and
+  generated paths are safely quoted
+- **Windows Codex setup**: Codex registration now uses the `.exe` binary path
+
+## [Unreleased] - 2026-08-29 (Alessandro Bartoli)
+
+Improves MCP startup reliability for Pi and other clean-environment clients.
+
+### Added
+
+- **Portable MCP wrapper**: `task mcp:wrapper` installs `~/.local/bin/mnemoir-mcp`,
+  a Linux/macOS POSIX launcher that loads `~/.mnemoir/.env` or the repository
+  `.env` before executing mnemoir, preventing Redis auth loss when clients start
+  from a clean environment
+
+## [Unreleased] - 2026-08-26 (Alessandro Bartoli)
+
+Improves first-run MCP setup and keeps client-specific installation optional.
+
+### Added
+
+- **Embedding prewarm command**: `task prewarm` or `mnemoir prewarm` downloads and
+  initializes the configured local ONNX model before MCP use. Non-local providers
+  skip the step without requiring API keys or running services
+
+### Changed
+
+- **Complete setup flow**: `task setup` and `task setup:codex` now prewarm the local
+  embedding model before registering MCP, avoiding a timeout during the first
+  connection. Manual installations can run `task prewarm` before connecting
+
+### Fixed
+
+- **Setup without Claude Code**: `task setup` now skips Claude-specific MCP,
+  hook, and specs registration when the `claude` command is unavailable, so
+  core installation can complete for clients such as Pi
+
+## [Unreleased] - 2026-07-07 (Alessandro Bartoli)
+
+### Fixed
+
+- **MCP silently unreachable in Claude Code (`-32000`)**: `task mcp` registered
+  the server in Claude's `local` (project) scope, which takes precedence over
+  `user` scope. Any host that ran both `task mcp` and `task mcp:global` ended
+  up with the global entry shadowed by a stale local one, and Claude Code
+  kept spawning whichever binary the local entry pointed to. `mcp:global` now
+  purges `local` and `project` scope entries before re-adding to `user`, so
+  the global registration always wins
+- **`task uninstall` leaving orphan MCP entries**: the remove command ran
+  without `-s`, so only the default (local) scope was cleared. `user` and
+  `project` scope registrations survived and continued to appear in
+  `claude mcp list`. Uninstall now removes from all three scopes explicitly
+
+### Changed
+
+- **`task mcp` renamed to `task mcp:local`**: the previous name did not signal
+  that the registration was cwd-bound and would shadow `mcp:global`.
+  Description now warns against combining both on the same host and recommends
+  `mcp:global` as the default
+
+## [Unreleased] - 2026-06-25
+
+### Fixed
+
+- **Taskfile `HOME_DIR` template crash on macOS**: `default` eagerly evaluates
+  both branches; piping nil `.USERPROFILE` into `replace` raised
+  `invalid value; expected string`. Replaced `default` with `if/else` guard so
+  `replace` only runs when `.HOME` is absent (Windows)
+
+## [Unreleased] - 2026-06-24 (Marco Bartoli)
+
+### Fixed
+
+- **Windows MCP binary suffix (MCP error `-32000`)**: `task build` and the
+  `mcp`/`mcp:global` registrations emitted and referenced an extensionless
+  `bin/mnemoir`; Node-spawned MCP clients (Claude Code) cannot launch a
+  suffix-less Windows executable. Build output and both registrations now append
+  `.exe` via a `BIN_EXT` var; the Codex script defaults to `mnemoir.exe` on
+  `windows`
+
+## [Unreleased] - 2026-06-24 (Alessandro Bartoli)
+
+### Added
+
+- **`MNEMOIR_CONFIG` env var**: config path via env (precedence `--config` >
+  `MNEMOIR_CONFIG` > `~/.mnemoir`); MCP registration uses it so spaced home paths
+  survive the spawn
+- **Cross-platform build**: `task build:all` targets macOS arm64/amd64, Linux
+  amd64, Windows amd64
+- **Taskfile**: migrated `Makefile` -> `Taskfile.yml`, `:`-namespaced targets
+
+### Fixed
+
+- **Windows local model download (`-32000`)**: hugot's HF hub symlinks cache
+  blobs; Windows `os.Symlink` needs the create-symlink privilege and fails with
+  `ERROR_PRIVILEGE_NOT_HELD`, so the embedder never initialized. Added a
+  symlink-free direct download + skip-if-present check; warm starts ~2s
+- **Local model cache location**: pinned `XDG_CACHE_HOME` to an absolute
+  owner-only dir; empty `$HOME` on Windows resolved the cache to cwd `.cache`,
+  re-downloading every spawn
+- **Windows spaced home path (`-32000`)**: `--config` was word-split on the
+  space; `task mcp`/`mcp:global` and Codex now pass `MNEMOIR_CONFIG`, Codex
+  normalizes MSYS paths via `cygpath -m`
+- **Windows WSL bash interception**: bare `bash` hit WSL bash (no `.exe` tools,
+  empty `$HOME`); added a `BASH` var defaulting to Git Bash (override
+  `MNEMOIR_BASH`), fixing `jq is required`
+- **Windows config path**: empty `$HOME` resolved `CONFIG_DIR` to `/.mnemoir`;
+  added `HOME_DIR` falling back to `USERPROFILE`, quoted all usages
+- **MCP registration idempotency**: `task mcp`/`mcp:global` remove before re-add
+- **Windows CRLF**: `.gitattributes` forces LF for `*.sh`/`*.toml`/`*.yml`
+- **Windows script execution**: prefix `scripts/*.sh` with `bash` (Task uses
+  `cmd.exe` on Windows)
+- **Windows prerequisites**: Git added as a required dep; `Git.Git`/`git` in
+  install commands
+- **Windows installation docs**: `Get-Command` for `which`, Go-bin `PATH` setup,
+  `$env:USERPROFILE` hint
+
+### Removed
+
+- **Makefile**: replaced by `Taskfile.yml`
+
 ## [Unreleased] - 2026-06-21 (Alessandro Bartoli)
 
 ### Added
 
-- **OpenAI Codex CLI auto-install**: `make setup-codex` covers the full Codex
+- **OpenAI Codex CLI auto-install**: `task setup:codex` covers the full Codex
   client setup in one command (Docker, build, config, MCP, hook, specs)
-   - `make mcp-codex`: registers mnemoir via `codex mcp add`, writing the server
+   - `task mcp:codex`: registers mnemoir via `codex mcp add`, writing the server
      entry to `~/.codex/config.toml`
-   - `make hook-codex`: appends a `[[hooks.Stop]]` block to `~/.codex/config.toml`
+   - `task hook:codex`: appends a `[[hooks.Stop]]` block to `~/.codex/config.toml`
      so mnemoir sessions close at the end of each Codex turn; the hook is a no-op
      when no session is active
-   - `make specs-codex`: writes agent specs to `~/.codex/memory/reference_mnemoir.md`
+   - `task specs:codex`: writes agent specs to `~/.codex/memory/reference_mnemoir.md`
      and a lifecycle pointer to `~/.codex/AGENTS.md`
-   - Corresponding `uninstall-*-codex.sh` scripts; `make uninstall` removes
+   - Corresponding `uninstall-*-codex.sh` scripts; `task uninstall` removes
      Codex CLI artifacts alongside claude artifacts
 
 ### Changed
 
 - **Client label in help and docs**: "Claude Code" renamed to "claude" in
-  `make help` output, README, and `docs/agent-specs.md`
+  `task --list` output, README, and `docs/agent-specs.md`
 - **Hook fallback note in agent specs**: updated to mention both the `SessionEnd`
   hook (claude) and the `Stop` hook (Codex CLI) as safety nets for ungraceful
   session termination
