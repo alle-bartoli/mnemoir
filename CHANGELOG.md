@@ -7,7 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased] - 2026-11-07 (Alessandro Bartoli)
 
-Makes local configuration safer while correcting backup guidance and consolidating tests.
+Aligns configuration, backup guidance, and test layout for safer long-term use.
 
 ### Fixed
 
@@ -19,10 +19,13 @@ Makes local configuration safer while correcting backup guidance and consolidati
 
 ### Changed
 
-- **Local configuration defaults**: partial configurations now use local
-  providers and the matching embedding dimension, consistent with the default file.
+- **Local configuration defaults**: partial configurations use local providers
+  and the matching embedding dimension. Default retention now uses a two-year
+  inactivity threshold with slower importance decay.
 - **Sideband listener**: health and session-end endpoints now bind to localhost
   by default instead of every network interface.
+- **Configuration reference**: now matches shipped defaults, explains when
+  maintenance runs, and warns that dimension changes require data migration.
 - **Test layout**: all Go tests now live under `test/`, grouped by feature.
 
 ## [Unreleased] - 2026-09-11 (Alessandro Bartoli)

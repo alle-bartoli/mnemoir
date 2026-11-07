@@ -44,7 +44,11 @@ All MCP-compatible clients can use Mnemoir. Clients without a session hook shoul
 
 ## Configuration
 
-The setup copies `config/default.toml` to `~/.mnemoir/config.toml`. Edit that file to change providers, model paths, Redis, scoring, or the sideband health server.
+The setup copies `config/default.toml` to `~/.mnemoir/config.toml`. Edit that file
+to change providers, model paths, Redis, scoring, or the sideband health server.
+Defaults decay importance by 12% every 90 days and consider low-importance
+memories for auto-forgetting after two years without access; see
+[search scoring and retention](docs/scoring.md).
 
 The default providers are:
 
@@ -72,6 +76,7 @@ task uninstall         # Remove installed artifacts
 
 ## Documentation
 
+- [Configuration](docs/internal/configuration.md): providers, retention, and server settings
 - [Client setup](docs/client-setup.md): manual MCP configuration and platform notes
 - [Troubleshooting](docs/troubleshooting.md): common startup and installation problems
 - [Backup and restore](docs/backup-restore.md): native and JSON backups

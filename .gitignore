@@ -15,7 +15,8 @@ data/
 *.dylib
 
 # Documentation (staged when ready)
-docs/internal/
+docs/internal/*
+!docs/internal/configuration.md
 
 # Go test/build cache
 *.test
