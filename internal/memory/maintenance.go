@@ -134,7 +134,7 @@ func (s *Store) autoForget(ctx context.Context, project string, maintCfg config.
 
 		// Run Lua script with candidate keys
 		deleted, err := autoForgetScript.Run(ctx, s.rdb, ids,
-			memCfg.DecayFactor,
+			memCfg.EffectiveDecayFactor(),
 			decayInterval.Seconds(),
 			memCfg.AccessBoostFactor,
 			memCfg.AccessBoostCap,

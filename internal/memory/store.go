@@ -190,7 +190,7 @@ func (s *Store) UpdateAccess(ctx context.Context, id string) error {
 	decayInterval, _ := s.memCfg.ParsedDecayInterval()
 
 	_, err := updateAccessScript.Run(ctx, s.rdb, []string{key},
-		s.memCfg.DecayFactor,
+		s.memCfg.EffectiveDecayFactor(),
 		decayInterval.Seconds(),
 		s.memCfg.AccessBoostFactor,
 		s.memCfg.AccessBoostCap,

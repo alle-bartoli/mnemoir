@@ -7,16 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased] - 2026-11-07 (Alessandro Bartoli)
 
-Makes backup and restore examples reliable across shell path expansion and spaces.
+Makes local configuration safer while correcting backup guidance and consolidating tests.
 
 ### Fixed
 
 - **Backup and restore paths**: documented commands now pass expanded home paths,
   and restore tasks preserve paths containing spaces. The JSON backup warning
   also points to the project’s actual `task backup` command.
+- **Memory configuration controls**: `auto_decay` now disables time-based decay,
+  and invalid intervals or negative search weights are rejected.
 
 ### Changed
 
+- **Local configuration defaults**: partial configurations now use local
+  providers and the matching embedding dimension, consistent with the default file.
+- **Sideband listener**: health and session-end endpoints now bind to localhost
+  by default instead of every network interface.
 - **Test layout**: all Go tests now live under `test/`, grouped by feature.
 
 ## [Unreleased] - 2026-09-11 (Alessandro Bartoli)

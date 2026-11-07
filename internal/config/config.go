@@ -75,6 +75,14 @@ type MemoryConfig struct {
 	AccessBoostCap    float64 `toml:"access_boost_cap"`
 }
 
+// EffectiveDecayFactor returns 1 when automatic decay is disabled.
+func (m MemoryConfig) EffectiveDecayFactor() float64 {
+	if !m.AutoDecay {
+		return 1
+	}
+	return m.DecayFactor
+}
+
 // ParsedDecayInterval returns the decay interval as time.Duration.
 func (m MemoryConfig) ParsedDecayInterval() (time.Duration, error) {
 	return time.ParseDuration(m.DecayInterval)
@@ -93,11 +101,11 @@ type ServerConfig struct {
 
 // MaintenanceConfig holds automatic cleanup settings.
 type MaintenanceConfig struct {
-	Enabled              bool    `toml:"enabled"`
-	ForgetThreshold      float64 `toml:"forget_threshold"`       // effective importance <= this
-	ForgetInactiveDays   int     `toml:"forget_inactive_days"`   // days since last access
-	MaxSessionsPerProject int    `toml:"max_sessions_per_project"`
-	MinRunInterval       string  `toml:"min_run_interval"`       // e.g. "1h"
+	Enabled               bool    `toml:"enabled"`
+	ForgetThreshold       float64 `toml:"forget_threshold"`     // effective importance <= this
+	ForgetInactiveDays    int     `toml:"forget_inactive_days"` // days since last access
+	MaxSessionsPerProject int     `toml:"max_sessions_per_project"`
+	MinRunInterval        string  `toml:"min_run_interval"` // e.g. "1h"
 }
 
 // ParsedMinRunInterval returns the minimum interval between maintenance runs.
@@ -151,13 +159,13 @@ func Load(path string) (*Config, error) {
 			DB:   0,
 		},
 		Compressor: CompressorConfig{
-			Provider: CompressorProviderClaude,
+			Provider: CompressorProviderLocal,
 			Claude:   CompressorClaudeConfig{Model: DefaultClaudeModel},
 			Ollama:   CompressorOllamaConfig{URL: DefaultOllamaURL, Model: DefaultOllamaCompressorModel},
 		},
 		Embedding: EmbeddingConfig{
-			Provider:  EmbeddingProviderOpenAI,
-			Dimension: 1536,
+			Provider:  EmbeddingProviderLocal,
+			Dimension: 384,
 			OpenAI:    EmbeddingOpenAIConfig{Model: DefaultOpenAIEmbeddingModel},
 			Ollama:    EmbeddingOllamaConfig{URL: DefaultOllamaURL, Model: DefaultOllamaEmbeddingModel},
 			Local:     EmbeddingLocalConfig{Model: DefaultLocalEmbeddingModel, ModelDir: DefaultModelDir},
@@ -178,11 +186,11 @@ func Load(path string) (*Config, error) {
 			MaxRecallItems: 20,
 		},
 		Maintenance: MaintenanceConfig{
-			Enabled:              true,
-			ForgetThreshold:      2.0,
-			ForgetInactiveDays:   90,
+			Enabled:               true,
+			ForgetThreshold:       2.0,
+			ForgetInactiveDays:    90,
 			MaxSessionsPerProject: 50,
-			MinRunInterval:       DefaultMinRunInterval,
+			MinRunInterval:        DefaultMinRunInterval,
 		},
 	}
 
@@ -231,13 +239,31 @@ func (c *Config) Validate() error {
 	if c.Memory.DecayFactor <= 0 || c.Memory.DecayFactor >= 1 {
 		return fmt.Errorf("memory.decay_factor must be in (0, 1) (got %f)", c.Memory.DecayFactor)
 	}
-	if _, err := time.ParseDuration(c.Memory.DecayInterval); err != nil {
-		return fmt.Errorf("memory.decay_interval is not a valid duration: %w", err)
+
+	decayInterval, err := time.ParseDuration(c.Memory.DecayInterval)
+	if err != nil {
+		return fmt.Errorf("memory.decay_interval is not valid: %w", err)
 	}
+	if decayInterval <= 0 {
+		return fmt.Errorf("memory.decay_interval must be positive")
+	}
+
 	// Weights should approximately sum to 1.0 (allow small tolerance)
+	weights := []float64{
+		c.Memory.VectorWeight,
+		c.Memory.FTSWeight,
+		c.Memory.ImportanceWeight,
+	}
+	for _, weight := range weights {
+		if weight < 0 {
+			return fmt.Errorf("memory weights must be >= 0")
+		}
+	}
+
 	weightSum := c.Memory.VectorWeight + c.Memory.FTSWeight + c.Memory.ImportanceWeight
+
 	if weightSum < 0.9 || weightSum > 1.1 {
-		return fmt.Errorf("memory weights (vector+fts+importance) should sum to ~1.0 (got %.2f)", weightSum)
+		return fmt.Errorf("memory weights must sum to approximately 1.0 (got %.2f)", weightSum)
 	}
 	if c.Memory.AccessBoostFactor < 0 {
 		return fmt.Errorf("memory.access_boost_factor must be >= 0 (got %f)", c.Memory.AccessBoostFactor)
@@ -262,9 +288,15 @@ func (c *Config) Validate() error {
 		if c.Maintenance.MaxSessionsPerProject <= 0 {
 			return fmt.Errorf("maintenance.max_sessions_per_project must be > 0 (got %d)", c.Maintenance.MaxSessionsPerProject)
 		}
-		if _, err := time.ParseDuration(c.Maintenance.MinRunInterval); err != nil {
-			return fmt.Errorf("maintenance.min_run_interval is not a valid duration: %w", err)
+
+		minRunInterval, err := time.ParseDuration(c.Maintenance.MinRunInterval)
+		if err != nil {
+			return fmt.Errorf("maintenance.min_run_interval is not valid: %w", err)
 		}
+		if minRunInterval <= 0 {
+			return fmt.Errorf("maintenance.min_run_interval must be positive")
+		}
+
 	}
 
 	return nil

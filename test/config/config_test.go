@@ -41,6 +41,18 @@ func validConfig() *config.Config {
 	}
 }
 
+func TestEffectiveDecayFactor(t *testing.T) {
+	cfg := config.MemoryConfig{AutoDecay: true, DecayFactor: 0.9}
+	if got := cfg.EffectiveDecayFactor(); got != 0.9 {
+		t.Errorf("EffectiveDecayFactor() with auto decay enabled = %v, want 0.9", got)
+	}
+
+	cfg.AutoDecay = false
+	if got := cfg.EffectiveDecayFactor(); got != 1 {
+		t.Errorf("EffectiveDecayFactor() with auto decay disabled = %v, want 1", got)
+	}
+}
+
 func TestValidate(t *testing.T) {
 	t.Run("ValidConfig", func(t *testing.T) {
 		cfg := validConfig()
@@ -105,6 +117,18 @@ func TestValidate(t *testing.T) {
 		}
 	})
 
+	t.Run("NonPositiveDecayInterval", func(t *testing.T) {
+		for _, interval := range []string{"0s", "-1h"} {
+			t.Run(interval, func(t *testing.T) {
+				cfg := validConfig()
+				cfg.Memory.DecayInterval = interval
+				if err := cfg.Validate(); err == nil {
+					t.Errorf("should reject decay_interval %q", interval)
+				}
+			})
+		}
+	})
+
 	t.Run("WeightsSumTooLow", func(t *testing.T) {
 		cfg := validConfig()
 		cfg.Memory.VectorWeight = 0.1
@@ -112,6 +136,16 @@ func TestValidate(t *testing.T) {
 		cfg.Memory.ImportanceWeight = 0.1
 		if err := cfg.Validate(); err == nil {
 			t.Error("should reject weights summing to 0.3")
+		}
+	})
+
+	t.Run("NegativeWeightWithValidSum", func(t *testing.T) {
+		cfg := validConfig()
+		cfg.Memory.VectorWeight = -0.1
+		cfg.Memory.FTSWeight = 0.6
+		cfg.Memory.ImportanceWeight = 0.5
+		if err := cfg.Validate(); err == nil {
+			t.Error("should reject a negative weight even when the sum is valid")
 		}
 	})
 
@@ -176,6 +210,18 @@ func TestValidate(t *testing.T) {
 		cfg.Maintenance.MinRunInterval = "not-a-duration"
 		if err := cfg.Validate(); err == nil {
 			t.Error("should reject unparseable min_run_interval")
+		}
+	})
+
+	t.Run("MaintenanceNonPositiveInterval", func(t *testing.T) {
+		for _, interval := range []string{"0s", "-1h"} {
+			t.Run(interval, func(t *testing.T) {
+				cfg := validConfig()
+				cfg.Maintenance.MinRunInterval = interval
+				if err := cfg.Validate(); err == nil {
+					t.Errorf("should reject min_run_interval %q", interval)
+				}
+			})
 		}
 	})
 

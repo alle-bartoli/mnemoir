@@ -146,7 +146,7 @@ func (s *Store) HybridSearch(ctx context.Context, query string, filters SearchFi
 	decayInterval, _ := s.memCfg.ParsedDecayInterval()
 	merged := mergeResults(vec.results, fts.results,
 		s.memCfg.VectorWeight, s.memCfg.FTSWeight, s.memCfg.ImportanceWeight,
-		s.memCfg.DecayFactor, decayInterval,
+		s.memCfg.EffectiveDecayFactor(), decayInterval,
 		s.memCfg.AccessBoostFactor, s.memCfg.AccessBoostCap,
 	)
 	results := truncate(merged, limit)
@@ -179,7 +179,7 @@ func (s *Store) trackAccess(ctx context.Context, results []SearchResult) {
 		// Redis caches it after first execution, and the extra bandwidth is
 		// negligible for fire-and-forget post-search tracking.
 		updateAccessScript.Eval(ctx, pipe, []string{key},
-			s.memCfg.DecayFactor,
+			s.memCfg.EffectiveDecayFactor(),
 			decayInterval.Seconds(),
 			s.memCfg.AccessBoostFactor,
 			s.memCfg.AccessBoostCap,
