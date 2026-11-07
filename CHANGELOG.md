@@ -15,7 +15,8 @@ Aligns configuration, backup guidance, and test layout for safer long-term use.
   and restore tasks preserve paths containing spaces. The JSON backup warning
   also points to the project’s actual `task backup` command.
 - **Memory configuration controls**: `auto_decay` now disables time-based decay,
-  and invalid intervals or negative search weights are rejected.
+  while invalid intervals, negative weights, and non-finite numeric values are
+  rejected.
 
 ### Changed
 

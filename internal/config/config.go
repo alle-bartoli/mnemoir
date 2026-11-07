@@ -3,6 +3,7 @@ package config
 
 import (
 	"fmt"
+	"math"
 	"os"
 	"path/filepath"
 	"time"
@@ -205,6 +206,10 @@ func Load(path string) (*Config, error) {
 	return cfg, nil
 }
 
+func isFinite(value float64) bool {
+	return !math.IsNaN(value) && !math.IsInf(value, 0)
+}
+
 // Validate checks all config invariants and returns the first error found.
 func (c *Config) Validate() error {
 	// Embedding
@@ -236,8 +241,8 @@ func (c *Config) Validate() error {
 	if c.Memory.DefaultImportance < 1 || c.Memory.DefaultImportance > 10 {
 		return fmt.Errorf("memory.default_importance must be 1-10 (got %d)", c.Memory.DefaultImportance)
 	}
-	if c.Memory.DecayFactor <= 0 || c.Memory.DecayFactor >= 1 {
-		return fmt.Errorf("memory.decay_factor must be in (0, 1) (got %f)", c.Memory.DecayFactor)
+	if !isFinite(c.Memory.DecayFactor) || c.Memory.DecayFactor <= 0 || c.Memory.DecayFactor >= 1 {
+		return fmt.Errorf("memory.decay_factor must be finite and in (0, 1) (got %f)", c.Memory.DecayFactor)
 	}
 
 	decayInterval, err := time.ParseDuration(c.Memory.DecayInterval)
@@ -255,8 +260,8 @@ func (c *Config) Validate() error {
 		c.Memory.ImportanceWeight,
 	}
 	for _, weight := range weights {
-		if weight < 0 {
-			return fmt.Errorf("memory weights must be >= 0")
+		if !isFinite(weight) || weight < 0 {
+			return fmt.Errorf("memory weights must be finite and >= 0")
 		}
 	}
 
@@ -265,11 +270,11 @@ func (c *Config) Validate() error {
 	if weightSum < 0.9 || weightSum > 1.1 {
 		return fmt.Errorf("memory weights must sum to approximately 1.0 (got %.2f)", weightSum)
 	}
-	if c.Memory.AccessBoostFactor < 0 {
-		return fmt.Errorf("memory.access_boost_factor must be >= 0 (got %f)", c.Memory.AccessBoostFactor)
+	if !isFinite(c.Memory.AccessBoostFactor) || c.Memory.AccessBoostFactor < 0 {
+		return fmt.Errorf("memory.access_boost_factor must be finite and >= 0 (got %f)", c.Memory.AccessBoostFactor)
 	}
-	if c.Memory.AccessBoostCap < 0 {
-		return fmt.Errorf("memory.access_boost_cap must be >= 0 (got %f)", c.Memory.AccessBoostCap)
+	if !isFinite(c.Memory.AccessBoostCap) || c.Memory.AccessBoostCap < 0 {
+		return fmt.Errorf("memory.access_boost_cap must be finite and >= 0 (got %f)", c.Memory.AccessBoostCap)
 	}
 
 	// Session
@@ -279,8 +284,8 @@ func (c *Config) Validate() error {
 
 	// Maintenance
 	if c.Maintenance.Enabled {
-		if c.Maintenance.ForgetThreshold < 0 || c.Maintenance.ForgetThreshold > 10 {
-			return fmt.Errorf("maintenance.forget_threshold must be in [0, 10] (got %.1f)", c.Maintenance.ForgetThreshold)
+		if !isFinite(c.Maintenance.ForgetThreshold) || c.Maintenance.ForgetThreshold < 0 || c.Maintenance.ForgetThreshold > 10 {
+			return fmt.Errorf("maintenance.forget_threshold must be finite and in [0, 10] (got %.1f)", c.Maintenance.ForgetThreshold)
 		}
 		if c.Maintenance.ForgetInactiveDays <= 0 {
 			return fmt.Errorf("maintenance.forget_inactive_days must be > 0 (got %d)", c.Maintenance.ForgetInactiveDays)

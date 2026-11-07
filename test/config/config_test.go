@@ -1,6 +1,7 @@
 package config_test
 
 import (
+	"math"
 	"testing"
 
 	"github.com/alle-bartoli/mnemoir/internal/config"
@@ -50,6 +51,43 @@ func TestEffectiveDecayFactor(t *testing.T) {
 	cfg.AutoDecay = false
 	if got := cfg.EffectiveDecayFactor(); got != 1 {
 		t.Errorf("EffectiveDecayFactor() with auto decay disabled = %v, want 1", got)
+	}
+}
+
+func TestValidateRejectsNonFiniteFloatValues(t *testing.T) {
+	fields := []struct {
+		name string
+		set  func(*config.Config, float64)
+	}{
+		{name: "decay_factor", set: func(cfg *config.Config, value float64) { cfg.Memory.DecayFactor = value }},
+		{name: "vector_weight", set: func(cfg *config.Config, value float64) { cfg.Memory.VectorWeight = value }},
+		{name: "fts_weight", set: func(cfg *config.Config, value float64) { cfg.Memory.FTSWeight = value }},
+		{name: "importance_weight", set: func(cfg *config.Config, value float64) { cfg.Memory.ImportanceWeight = value }},
+		{name: "access_boost_factor", set: func(cfg *config.Config, value float64) { cfg.Memory.AccessBoostFactor = value }},
+		{name: "access_boost_cap", set: func(cfg *config.Config, value float64) { cfg.Memory.AccessBoostCap = value }},
+		{name: "forget_threshold", set: func(cfg *config.Config, value float64) { cfg.Maintenance.ForgetThreshold = value }},
+	}
+	values := []struct {
+		name  string
+		value float64
+	}{
+		{name: "NaN", value: math.NaN()},
+		{name: "positive_infinity", value: math.Inf(1)},
+		{name: "negative_infinity", value: math.Inf(-1)},
+	}
+
+	for _, field := range fields {
+		t.Run(field.name, func(t *testing.T) {
+			for _, value := range values {
+				t.Run(value.name, func(t *testing.T) {
+					cfg := validConfig()
+					field.set(cfg, value.value)
+					if err := cfg.Validate(); err == nil {
+						t.Errorf("should reject %s = %v", field.name, value.value)
+					}
+				})
+			}
+		})
 	}
 }
 
