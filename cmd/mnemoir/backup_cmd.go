@@ -27,7 +27,7 @@ func runBackup(args []string) {
 	defer rc.Close()
 
 	fmt.Fprintln(os.Stderr, "WARNING: JSON backup is not atomic. Concurrent writes may produce an inconsistent snapshot.")
-	fmt.Fprintln(os.Stderr, "         For a consistent backup use 'make backup' (BGSAVE + data dir copy).")
+	fmt.Fprintln(os.Stderr, "         For a consistent backup use 'task backup' (BGSAVE + data dir copy).")
 
 	w := os.Stdout
 	if *output != "" {

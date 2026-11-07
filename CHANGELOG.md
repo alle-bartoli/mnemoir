@@ -5,6 +5,20 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased] - 2026-11-07 (Alessandro Bartoli)
+
+Makes backup and restore examples reliable across shell path expansion and spaces.
+
+### Fixed
+
+- **Backup and restore paths**: documented commands now pass expanded home paths,
+  and restore tasks preserve paths containing spaces. The JSON backup warning
+  also points to the project’s actual `task backup` command.
+
+### Changed
+
+- **Test layout**: all Go tests now live under `test/`, grouped by feature.
+
 ## [Unreleased] - 2026-09-11 (Alessandro Bartoli)
 
 Improves public onboarding while keeping agent instructions self-contained.

@@ -273,7 +273,7 @@ tasks:
       - sh: '[ -n "{{.INPUT}}" ]'
         msg: "Usage: task restore INPUT=path/to/backup-dir"
     cmds:
-      - '"{{.BASH}}" ./scripts/restore-native.sh {{.INPUT}}'
+      - '"{{.BASH}}" ./scripts/restore-native.sh "{{.INPUT}}"'
 
   backup:json:
     desc: "Dump all memories to JSON"
@@ -288,7 +288,7 @@ tasks:
       - sh: '[ -n "{{.INPUT}}" ]'
         msg: "Usage: task restore:json INPUT=path/to/backup.json"
     cmds:
-      - '{{.BIN_DIR}}/{{.BINARY}} restore --config "{{.CONFIG_DIR}}/config.toml" --input {{.INPUT}}'
+      - '{{.BIN_DIR}}/{{.BINARY}} restore --config "{{.CONFIG_DIR}}/config.toml" --input "{{.INPUT}}"'
 
   # ---------------------------------------------------------------------------
   # Cleanup
