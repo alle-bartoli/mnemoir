@@ -34,10 +34,10 @@ For manual clients, use `~/.mnemoir/.env` instead of a repository `.env` when th
 
 ## Supported clients
 
-| Client | Setup | Session hook |
-| --- | --- | --- |
-| Claude Code | `task setup` | `SessionEnd` |
-| OpenAI Codex CLI | `task setup:codex` | `Stop` |
+| Client                                           | Setup                                | Session hook         |
+| ------------------------------------------------ | ------------------------------------ | -------------------- |
+| Claude Code                                      | `task setup`                         | `SessionEnd`         |
+| OpenAI Codex CLI                                 | `task setup:codex`                   | `Stop`               |
 | Claude Desktop, Pi, Cursor, Windsurf, Cline, Zed | [manual setup](docs/client-setup.md) | Manual `end_session` |
 
 All MCP-compatible clients can use Mnemoir. Clients without a session hook should call `end_session` before the conversation ends.
@@ -48,10 +48,10 @@ The setup copies `config/default.toml` to `~/.mnemoir/config.toml`. Edit that fi
 
 The default providers are:
 
-| Provider | Default | API key |
-| --- | --- | --- |
-| Compressor | `local` | None |
-| Embeddings | `local` | None |
+| Provider   | Default | API key |
+| ---------- | ------- | ------- |
+| Compressor | `local` | None    |
+| Embeddings | `local` | None    |
 
 See [client setup](docs/client-setup.md) for manual configuration and optional provider keys.
 

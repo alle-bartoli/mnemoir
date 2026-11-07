@@ -18,5 +18,5 @@ boost     = min(access_boost_cap, access_count * access_boost_factor)
 effective = clamp(1.0, 10.0, decayed + boost)
 ```
 
-Maintenance runs periodically and removes memories below `maintenance.forget_threshold` that have been inactive for `maintenance.forget_inactive_days`. 
+Maintenance runs periodically and removes memories below `maintenance.forget_threshold` that have been inactive for `maintenance.forget_inactive_days`.
 Both thresholds are configurable.

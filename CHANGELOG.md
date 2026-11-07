@@ -168,15 +168,15 @@ Improves first-run MCP setup and keeps client-specific installation optional.
 
 - **OpenAI Codex CLI auto-install**: `task setup:codex` covers the full Codex
   client setup in one command (Docker, build, config, MCP, hook, specs)
-   - `task mcp:codex`: registers mnemoir via `codex mcp add`, writing the server
-     entry to `~/.codex/config.toml`
-   - `task hook:codex`: appends a `[[hooks.Stop]]` block to `~/.codex/config.toml`
-     so mnemoir sessions close at the end of each Codex turn; the hook is a no-op
-     when no session is active
-   - `task specs:codex`: writes agent specs to `~/.codex/memory/reference_mnemoir.md`
-     and a lifecycle pointer to `~/.codex/AGENTS.md`
-   - Corresponding `uninstall-*-codex.sh` scripts; `task uninstall` removes
-     Codex CLI artifacts alongside claude artifacts
+  - `task mcp:codex`: registers mnemoir via `codex mcp add`, writing the server
+    entry to `~/.codex/config.toml`
+  - `task hook:codex`: appends a `[[hooks.Stop]]` block to `~/.codex/config.toml`
+    so mnemoir sessions close at the end of each Codex turn; the hook is a no-op
+    when no session is active
+  - `task specs:codex`: writes agent specs to `~/.codex/memory/reference_mnemoir.md`
+    and a lifecycle pointer to `~/.codex/AGENTS.md`
+  - Corresponding `uninstall-*-codex.sh` scripts; `task uninstall` removes
+    Codex CLI artifacts alongside claude artifacts
 
 ### Changed
 

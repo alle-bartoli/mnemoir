@@ -8,7 +8,7 @@ For the full setup, run:
 task setup
 ```
 
-This configures the global MCP server, `SessionEnd` hook, and agent specs. 
+This configures the global MCP server, `SessionEnd` hook, and agent specs.
 If Claude Code is not installed, the client-specific steps are skipped.
 
 ## OpenAI Codex CLI
@@ -66,7 +66,7 @@ task mcp:wrapper
 pi install npm:pi-mcp-adapter
 ```
 
-Add `~/.local/bin/mnemoir-mcp` to Pi's MCP configuration. 
+Add `~/.local/bin/mnemoir-mcp` to Pi's MCP configuration.
 The wrapper reads `MNEMOIR_REDIS_PASSWORD` from the environment or the `.env` file in `~/.mnemoir` (then the repository `.env`).
 
 ## Optional providers
